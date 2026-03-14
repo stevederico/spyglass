@@ -10,10 +10,16 @@
 
 /** Device dimension specifications for App Store Connect screenshot sizes */
 export const DEVICES = {
-  'iphone-67': { label: 'iPhone 16 Pro Max (6.7")', width: 1290, height: 2796, radius: 120, bezelWidth: 18 },
-  'iphone-61': { label: 'iPhone 16 Pro (6.1")', width: 1179, height: 2556, radius: 110, bezelWidth: 16 },
-  'iphone-47': { label: 'iPhone SE (4.7")', width: 750, height: 1334, radius: 0, bezelWidth: 12 },
-  'ipad-129': { label: 'iPad Pro 12.9"', width: 2048, height: 2732, radius: 40, bezelWidth: 20 }
+  'iphone-69':  { label: 'iPhone 16 Pro Max (6.9")', width: 1320, height: 2868, radius: 125, bezelWidth: 18 },
+  'iphone-67':  { label: 'iPhone 16 Plus (6.7")', width: 1290, height: 2796, radius: 120, bezelWidth: 18 },
+  'iphone-65':  { label: 'iPhone 16 Pro (6.3")', width: 1206, height: 2622, radius: 115, bezelWidth: 16 },
+  'iphone-61':  { label: 'iPhone 16 (6.1")', width: 1179, height: 2556, radius: 110, bezelWidth: 16 },
+  'iphone-55':  { label: 'iPhone 8 Plus (5.5")', width: 1242, height: 2208, radius: 0, bezelWidth: 14 },
+  'iphone-47':  { label: 'iPhone SE (4.7")', width: 750, height: 1334, radius: 0, bezelWidth: 12 },
+  'ipad-13':    { label: 'iPad Pro 13" (M4)', width: 2064, height: 2752, radius: 50, bezelWidth: 22 },
+  'ipad-129':   { label: 'iPad Pro 12.9" (6th gen)', width: 2048, height: 2732, radius: 40, bezelWidth: 20 },
+  'ipad-11':    { label: 'iPad Air 11" (M3)', width: 1668, height: 2388, radius: 40, bezelWidth: 18 },
+  'ipad-105':   { label: 'iPad 10.5"', width: 1668, height: 2224, radius: 0, bezelWidth: 16 }
 };
 
 /** Font weight label-to-CSS value mapping */

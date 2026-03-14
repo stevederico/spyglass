@@ -1,5 +1,5 @@
 {
-    "version": "0.1.0",
+    "version": "0.2.0",
     "appName": "Spyglass",
     "appIcon": "eye",
     "tagline": "App Store Connect Screenshot & Metadata Manager",
@@ -31,12 +31,8 @@
     "backendURL": "/api",
     "devBackendURL": "http://localhost:8000/api",
     "pages": [
-        { "title": "Apps", "url": "home", "icon": "app-window" },
-        { "title": "Composer", "url": "composer", "icon": "palette" },
-        { "title": "Localization", "url": "localization", "icon": "languages" },
-        { "title": "Screenshots", "url": "screenshots", "icon": "camera" },
-        { "title": "Metadata", "url": "metadata", "icon": "file-text" },
-        { "title": "Settings", "url": "settings", "icon": "settings" }
+        { "title": "Studio", "url": "home", "icon": "palette" },
+        { "title": "Exports", "url": "exports", "icon": "download" }
     ],
     "stripeProducts": [
         {

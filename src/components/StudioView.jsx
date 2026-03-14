@@ -1,23 +1,29 @@
 /**
- * Screenshot composer view for creating App Store marketing screenshots
+ * Studio view for creating App Store marketing screenshots with localization
  *
  * Provides a canvas-based editor that layers background, device frame,
  * screenshot, and marketing text. Left panel shows a live preview,
- * right panel provides controls for all settings.
+ * right panel provides controls for all settings including batch
+ * translation into all 28 App Store Connect locales.
  *
  * @component
- * @returns {JSX.Element} Screenshot composer interface
+ * @returns {JSX.Element} Screenshot studio interface
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Header from '@stevederico/skateboard-ui/Header';
+import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@stevederico/skateboard-ui/shadcn/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@stevederico/skateboard-ui/shadcn/ui/card';
 import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
 import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
 import { Switch } from '@stevederico/skateboard-ui/shadcn/ui/switch';
 import { Slider } from '@stevederico/skateboard-ui/shadcn/ui/slider';
 import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
+import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
+import { Progress } from '@stevederico/skateboard-ui/shadcn/ui/progress';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@stevederico/skateboard-ui/shadcn/ui/table';
+import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
 import { toast } from 'sonner';
 import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG } from './composerHelpers.js';
 
@@ -37,7 +43,63 @@ const GRADIENT_DIRECTIONS = [
 /** Font weight options */
 const WEIGHT_OPTIONS = Object.keys(FONT_WEIGHTS);
 
-export default function ComposerView() {
+/** All supported App Store Connect locales */
+const LOCALES = [
+  { code: 'en-US', name: 'English (US)' },
+  { code: 'en-GB', name: 'English (UK)' },
+  { code: 'en-AU', name: 'English (Australia)' },
+  { code: 'en-CA', name: 'English (Canada)' },
+  { code: 'da-DK', name: 'Danish' },
+  { code: 'de-DE', name: 'German' },
+  { code: 'el-GR', name: 'Greek' },
+  { code: 'es-ES', name: 'Spanish (Spain)' },
+  { code: 'es-MX', name: 'Spanish (Mexico)' },
+  { code: 'fi-FI', name: 'Finnish' },
+  { code: 'fr-FR', name: 'French (France)' },
+  { code: 'fr-CA', name: 'French (Canada)' },
+  { code: 'id-ID', name: 'Indonesian' },
+  { code: 'it-IT', name: 'Italian' },
+  { code: 'ja-JP', name: 'Japanese' },
+  { code: 'ko-KR', name: 'Korean' },
+  { code: 'ms-MY', name: 'Malay' },
+  { code: 'nl-NL', name: 'Dutch' },
+  { code: 'no-NO', name: 'Norwegian' },
+  { code: 'pt-BR', name: 'Portuguese (Brazil)' },
+  { code: 'pt-PT', name: 'Portuguese (Portugal)' },
+  { code: 'ru-RU', name: 'Russian' },
+  { code: 'sv-SE', name: 'Swedish' },
+  { code: 'th-TH', name: 'Thai' },
+  { code: 'tr-TR', name: 'Turkish' },
+  { code: 'cmn-Hans', name: 'Chinese (Simplified)' },
+  { code: 'cmn-Hant', name: 'Chinese (Traditional)' },
+  { code: 'vi-VI', name: 'Vietnamese' }
+];
+
+/** Locale codes that use English source text directly */
+const ENGLISH_LOCALES = new Set(['en-US', 'en-GB', 'en-AU', 'en-CA']);
+
+/**
+ * Return Badge variant and label for a translation status
+ *
+ * @param {string} status - One of 'original', 'translated', 'modified', 'error'
+ * @returns {{ label: string, variant: string }} Badge display properties
+ */
+function getStatusBadge(status) {
+  switch (status) {
+    case 'original':
+      return { label: 'Original', variant: 'secondary' };
+    case 'translated':
+      return { label: 'Translated', variant: 'default' };
+    case 'modified':
+      return { label: 'Modified', variant: 'outline' };
+    case 'error':
+      return { label: 'Error', variant: 'destructive' };
+    default:
+      return { label: 'Pending', variant: 'secondary' };
+  }
+}
+
+export default function StudioView() {
   const canvasRef = useRef(null);
 
   // Background state
@@ -62,10 +124,17 @@ export default function ComposerView() {
   const [showBezel, setShowBezel] = useState(true);
   const [screenshotImage, setScreenshotImage] = useState(null);
 
+  // Localization state
+  const [translations, setTranslations] = useState({});
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationProgress, setTranslationProgress] = useState(0);
+  const [showTranslations, setShowTranslations] = useState(false);
+
   const currentDevice = DEVICES[device];
+  const hasTranslations = Object.keys(translations).length > 0;
 
   /**
-   * Load an image file from a File object and return an HTMLImageElement
+   * Load an image file from a File object
    *
    * @param {File} file - Image file to load
    * @returns {Promise<HTMLImageElement>} Loaded image element
@@ -85,7 +154,7 @@ export default function ComposerView() {
   }, []);
 
   /**
-   * Handle background image upload from file input
+   * Handle background image upload
    *
    * @param {Event} e - File input change event
    */
@@ -101,7 +170,7 @@ export default function ComposerView() {
   }
 
   /**
-   * Handle screenshot upload from file input or drop
+   * Handle screenshot upload
    *
    * @param {Event} e - File input change event
    */
@@ -143,28 +212,122 @@ export default function ComposerView() {
     toast.success('Screenshot exported');
   }
 
+  /**
+   * Translate current text lines into all App Store locales
+   *
+   * Sets English locales to source text, then calls the batch
+   * translation API for all other locales with progress tracking.
+   */
+  const handleTranslateAll = useCallback(async () => {
+    if (!textLine1.trim() && !textLine2.trim()) {
+      toast.error('Enter marketing text first');
+      return;
+    }
+
+    setIsTranslating(true);
+    setTranslationProgress(0);
+    setShowTranslations(true);
+
+    const newTranslations = {};
+
+    for (const code of ENGLISH_LOCALES) {
+      newTranslations[code] = {
+        line1: textLine1,
+        line2: textLine2,
+        status: 'original'
+      };
+    }
+
+    const nonEnglishLocales = LOCALES.filter((l) => !ENGLISH_LOCALES.has(l.code));
+    let completed = 0;
+
+    setTranslationProgress(Math.round((ENGLISH_LOCALES.size / LOCALES.length) * 100));
+    setTranslations({ ...newTranslations });
+
+    for (const locale of nonEnglishLocales) {
+      try {
+        const response = await apiRequest('/translate/batch', {
+          method: 'POST',
+          body: JSON.stringify({
+            texts: [textLine1, textLine2],
+            source: 'en',
+            target: locale.code
+          })
+        });
+
+        if (response?.translations) {
+          newTranslations[locale.code] = {
+            line1: response.translations[0] ?? '',
+            line2: response.translations[1] ?? '',
+            status: 'translated'
+          };
+        } else {
+          newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
+        }
+      } catch {
+        newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
+      }
+
+      completed++;
+      setTranslationProgress(Math.round(((ENGLISH_LOCALES.size + completed) / LOCALES.length) * 100));
+      setTranslations({ ...newTranslations });
+    }
+
+    setIsTranslating(false);
+    setTranslationProgress(100);
+    toast.success('Translation complete');
+  }, [textLine1, textLine2]);
+
+  /**
+   * Handle manual edit of a translated cell
+   *
+   * @param {string} localeCode - Locale code being edited
+   * @param {'line1'|'line2'} field - Which line is being edited
+   * @param {string} value - New translation text
+   */
+  const handleCellEdit = useCallback((localeCode, field, value) => {
+    setTranslations((prev) => ({
+      ...prev,
+      [localeCode]: {
+        ...prev[localeCode],
+        [field]: value,
+        status: ENGLISH_LOCALES.has(localeCode) ? 'original' : 'modified'
+      }
+    }));
+  }, []);
+
+  /** Copy all translations as JSON to clipboard */
+  const handleCopyAll = useCallback(async () => {
+    if (!hasTranslations) {
+      toast.error('No translations to copy');
+      return;
+    }
+
+    const output = {};
+    for (const locale of LOCALES) {
+      const t = translations[locale.code];
+      if (t) {
+        output[locale.code] = { name: locale.name, line1: t.line1, line2: t.line2 };
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(output, null, 2));
+      toast.success('Translations copied to clipboard');
+    } catch {
+      toast.error('Failed to copy to clipboard');
+    }
+  }, [translations, hasTranslations]);
+
   // Redraw canvas whenever any setting changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     drawComposite(canvas, {
-      device,
-      showBezel,
-      screenshotImage,
-      textLine1,
-      textLine2,
-      textPosition,
-      fontSize,
-      textColor,
-      textShadow,
-      fontWeight,
-      bgColor,
-      isGradient,
-      gradientStart,
-      gradientEnd,
-      gradientDirection,
-      bgImage
+      device, showBezel, screenshotImage,
+      textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
+      bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage
     });
   }, [
     device, showBezel, screenshotImage,
@@ -174,7 +337,7 @@ export default function ComposerView() {
 
   return (
     <>
-      <Header title="Composer" />
+      <Header title="Studio" />
       <div className="flex flex-1 flex-col">
         <div className="flex flex-col gap-4 p-4 md:p-6 lg:flex-row">
 
@@ -193,7 +356,7 @@ export default function ComposerView() {
           </section>
 
           {/* Right: Controls */}
-          <aside className="flex flex-col gap-4 lg:w-2/5" aria-label="Composer settings">
+          <aside className="flex flex-col gap-4 lg:w-2/5" aria-label="Studio settings">
 
             {/* Background Section */}
             <Card>
@@ -459,6 +622,108 @@ export default function ComposerView() {
                     aria-label="Screenshot file input"
                   />
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Localization Section */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Localization</CardTitle>
+                <CardDescription>
+                  Translate marketing text into all 28 App Store locales
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-4">
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={handleTranslateAll}
+                    disabled={isTranslating || (!textLine1.trim() && !textLine2.trim())}
+                    aria-label="Translate text into all locales"
+                  >
+                    {isTranslating ? 'Translating...' : 'Translate All'}
+                  </Button>
+                  {hasTranslations && (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowTranslations(!showTranslations)}
+                        aria-label={showTranslations ? 'Hide translations table' : 'Show translations table'}
+                      >
+                        {showTranslations ? 'Hide' : 'Show'} ({Object.keys(translations).length})
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCopyAll}
+                        disabled={isTranslating}
+                        aria-label="Copy all translations as JSON"
+                      >
+                        Copy
+                      </Button>
+                    </>
+                  )}
+                </div>
+
+                {isTranslating && (
+                  <div className="flex flex-col gap-1.5" role="status" aria-live="polite">
+                    <Progress value={translationProgress} aria-label="Translation progress" />
+                    <p className="text-xs text-muted-foreground">
+                      Translating... {translationProgress}%
+                    </p>
+                  </div>
+                )}
+
+                {showTranslations && hasTranslations && (
+                  <ScrollArea className="h-[400px] rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[140px]">Language</TableHead>
+                          <TableHead>Line 1</TableHead>
+                          <TableHead>Line 2</TableHead>
+                          <TableHead className="w-[90px]">Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {LOCALES.map((locale) => {
+                          const t = translations[locale.code];
+                          if (!t) return null;
+                          const { label, variant } = getStatusBadge(t.status);
+
+                          return (
+                            <TableRow key={locale.code}>
+                              <TableCell className="text-xs font-medium">
+                                {locale.name}
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={t.line1}
+                                  onChange={(e) => handleCellEdit(locale.code, 'line1', e.target.value)}
+                                  disabled={isTranslating}
+                                  aria-label={`${locale.name} line 1 translation`}
+                                  className="h-7 text-xs"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Input
+                                  value={t.line2}
+                                  onChange={(e) => handleCellEdit(locale.code, 'line2', e.target.value)}
+                                  disabled={isTranslating}
+                                  aria-label={`${locale.name} line 2 translation`}
+                                  className="h-7 text-xs"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={variant} className="text-xs">{label}</Badge>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                )}
               </CardContent>
             </Card>
 

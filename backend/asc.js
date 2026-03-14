@@ -374,13 +374,21 @@ app.delete('/asc/screenshots/:id', async (c) => {
 /**
  * POST /asc/screenshots/capture - Capture screenshots from iOS simulators
  *
- * Boots each specified simulator, installs and launches the app, captures a
- * screenshot, then saves it to backend/screenshots/<bundleId>/<simulator>/.
+ * Requires macOS with Xcode CLI tools. Disabled when DISABLE_SIMULATOR=true
+ * (e.g. on Railway or other Linux hosting).
+ *
+ * Boots each specified simulator, launches the app, captures a screenshot,
+ * then saves it to backend/screenshots/<bundleId>/<simulator>/.
  *
  * Expects JSON body: { bundleId: string, simulators: string[] }
  * @returns {Object} { screenshots: Array<{ simulator, path }> }
  */
 app.post('/asc/screenshots/capture', async (c) => {
+  if (process.env.DISABLE_SIMULATOR === 'true') {
+    return c.json({
+      error: 'Simulator capture is unavailable in this environment. Upload screenshots manually via the Exports view.'
+    }, 501);
+  }
   try {
     const body = await c.req.json();
     const { bundleId, simulators } = body;

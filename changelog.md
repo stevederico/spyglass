@@ -7,6 +7,16 @@
 - Localized metadata editing
 - ASO keyword suggestions
 
+0.2.0
+
+  Rename Composer to Studio
+  Merge localization into Studio
+  Merge screenshots and metadata into Exports
+  Extend settings with ASC credentials
+  Add modern device types
+  Remove Apps, Localization, Screenshots, Metadata views
+  Update README for Spyglass
+
 0.1.0
 
   Add App Store Connect API integration
