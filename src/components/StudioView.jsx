@@ -340,7 +340,7 @@ export default function StudioView() {
 
   return (
     <>
-      <Header title="Studio">
+      <Header title="" className="[&>div>div:last-child]:ml-0">
         <AppPicker />
       </Header>
       {!selectedApp ? (

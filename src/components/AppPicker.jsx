@@ -62,7 +62,7 @@ export default function AppPicker() {
         value={selectedApp?.id || ''}
         onValueChange={handleValueChange}
       >
-        <SelectTrigger className="mr-auto h-8 w-48" aria-label="Select an app">
+        <SelectTrigger className="h-8 w-48" aria-label="Select an app">
           <SelectValue placeholder="Select App" />
         </SelectTrigger>
         <SelectContent>

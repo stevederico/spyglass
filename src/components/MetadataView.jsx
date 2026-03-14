@@ -89,7 +89,7 @@ export default function MetadataView() {
    * @param {string} appId - App Store Connect app identifier
    */
   async function fetchMetadata(appId) {
-    if (!appId) return;
+    if (!appId || appId.startsWith('local-')) return;
     setIsLoadingMeta(true);
     try {
       const result = await apiRequest(`/asc/apps/${appId}/metadata`);
@@ -251,7 +251,7 @@ export default function MetadataView() {
 
   return (
     <>
-      <Header title="Metadata">
+      <Header title="" className="[&>div>div:last-child]:ml-0">
         <AppPicker />
       </Header>
       {!selectedApp ? (

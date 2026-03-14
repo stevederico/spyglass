@@ -7,6 +7,27 @@
 - Localized metadata editing
 - ASO keyword suggestions
 
+0.3.1
+
+  Add ASC app picker upload dialog
+  Move header titles to app picker
+  Fix local app display names
+  Skip ASC calls for local apps
+
+0.3.0
+
+  Add shared app picker context
+  Add app picker header dropdown
+  Add create new app dialog
+  Add MetadataView standalone page
+  Add AI metadata generation backend
+  Add simulator environment guard
+  Add deployment docs Railway
+  Update device labels display sizes
+  Move metadata out of Exports
+  Add upload button Exports header
+  Move ASC banner bottom Exports
+
 0.2.0
 
   Rename Composer to Studio

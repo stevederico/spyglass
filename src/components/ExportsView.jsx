@@ -15,6 +15,7 @@ import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
 import { Card, CardContent } from '@stevederico/skateboard-ui/shadcn/ui/card';
 import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
 import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
 import { AspectRatio } from '@stevederico/skateboard-ui/shadcn/ui/aspect-ratio';
 import { Alert, AlertDescription } from '@stevederico/skateboard-ui/shadcn/ui/alert';
@@ -236,61 +237,62 @@ export default function ExportsView() {
   const [isUploading, setIsUploading] = useState(false);
   const headerFileInputRef = useRef(null);
 
-  /** Fetch screenshots when the selected app changes */
-  useEffect(() => {
-    if (!selectedApp?.id) {
-      setScreenshots([]);
-      return;
-    }
-    fetchScreenshots(selectedApp.id);
-  }, [selectedApp?.id]);
+  // Upload dialog state
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [ascApps, setAscApps] = useState([]);
+  const [isLoadingAscApps, setIsLoadingAscApps] = useState(false);
+  const [selectedAscApp, setSelectedAscApp] = useState('');
 
   /**
-   * Fetch screenshots for the selected app
+   * Handle file selection — stage file and open ASC app picker dialog
    *
-   * @param {string} appId - App Store Connect app identifier
+   * @param {File} file - Image file to upload
    */
-  async function fetchScreenshots(appId) {
-    if (!appId) return;
-    setIsLoadingScreenshots(true);
+  function handleFileSelected(file) {
+    setPendingFile(file);
+    setSelectedAscApp('');
+    setIsUploadDialogOpen(true);
+    fetchAscApps();
+  }
+
+  /** Fetch ASC apps for the upload dialog picker */
+  async function fetchAscApps() {
+    setIsLoadingAscApps(true);
     try {
-      const result = await apiRequest(`/asc/apps/${appId}/screenshots`);
-      setScreenshots(result?.data || []);
+      const result = await apiRequest('/asc/apps');
+      setAscApps(result?.data || []);
     } catch {
-      toast.error('Failed to load screenshots');
-      setScreenshots([]);
+      toast.error('Failed to load App Store Connect apps');
+      setAscApps([]);
     } finally {
-      setIsLoadingScreenshots(false);
+      setIsLoadingAscApps(false);
     }
   }
 
   /**
-   * Upload a screenshot file for the selected app
-   *
-   * @param {File} file - Image file to upload
+   * Upload the pending file to the selected ASC app
    */
-  async function handleUploadScreenshot(file) {
-    if (!selectedApp?.id) {
-      toast.error('Select an app first');
-      return;
-    }
+  async function handleConfirmUpload() {
+    if (!pendingFile || !selectedAscApp) return;
     setIsUploading(true);
+    setIsUploadDialogOpen(false);
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', pendingFile);
       if (selectedLocale !== 'all') formData.append('locale', selectedLocale);
       if (selectedDevice !== 'all') formData.append('deviceType', selectedDevice);
 
-      await apiRequest(`/asc/apps/${selectedApp.id}/screenshots`, {
+      await apiRequest(`/asc/apps/${selectedAscApp}/screenshots`, {
         method: 'POST',
         body: formData
       });
-      toast.success('Screenshot uploaded');
-      await fetchScreenshots(selectedApp.id);
+      toast.success('Screenshot uploaded to App Store Connect');
     } catch {
       toast.error('Failed to upload screenshot');
     } finally {
       setIsUploading(false);
+      setPendingFile(null);
     }
   }
 
@@ -320,35 +322,34 @@ export default function ExportsView() {
 
   return (
     <>
-      <Header title="Exports">
+      <Header title="" className="[&>div>div:last-child]:ml-0 [&>div>div:last-child]:flex-1">
         <AppPicker />
-        <div className="ml-auto flex items-center gap-2">
-          {selectedApp && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => headerFileInputRef.current?.click()}
-                disabled={isUploading}
-                aria-label="Upload screenshot"
-              >
-                {isUploading ? 'Uploading...' : 'Upload'}
-              </Button>
-              <input
-                ref={headerFileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleUploadScreenshot(file);
-                  e.target.value = '';
-                }}
-                className="hidden"
-                aria-hidden="true"
-              />
-            </>
-          )}
-        </div>
+        <div className="flex-1" />
+        {selectedApp && (
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => headerFileInputRef.current?.click()}
+              disabled={isUploading}
+              aria-label="Upload screenshot"
+            >
+              {isUploading ? 'Uploading...' : 'Upload'}
+            </Button>
+            <input
+              ref={headerFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFileSelected(file);
+                e.target.value = '';
+              }}
+              className="hidden"
+              aria-hidden="true"
+            />
+          </>
+        )}
       </Header>
       {!selectedApp ? (
         <div className="flex flex-1 items-center justify-center">
@@ -420,7 +421,7 @@ export default function ExportsView() {
                   />
                 ))}
                 <UploadDropZone
-                  onUpload={handleUploadScreenshot}
+                  onUpload={handleFileSelected}
                   isUploading={isUploading}
                 />
               </div>
@@ -443,6 +444,58 @@ export default function ExportsView() {
         </div>
       </div>
       )}
+
+      {/* Upload to ASC dialog */}
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Upload to App Store Connect</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-2">
+            <Label htmlFor="asc-app-select">Select App</Label>
+            <Select value={selectedAscApp} onValueChange={setSelectedAscApp}>
+              <SelectTrigger id="asc-app-select" aria-label="Select App Store Connect app">
+                <SelectValue placeholder="Select an app" />
+              </SelectTrigger>
+              <SelectContent>
+                {isLoadingAscApps ? (
+                  <SelectItem value="_loading" disabled>Loading...</SelectItem>
+                ) : (
+                  ascApps.map((app) => (
+                    <SelectItem key={app.id} value={app.id}>
+                      {app.attributes?.name || app.id}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+            {pendingFile && (
+              <p className="text-xs text-muted-foreground">
+                File: {pendingFile.name}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsUploadDialogOpen(false);
+                setPendingFile(null);
+              }}
+              aria-label="Cancel upload"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmUpload}
+              disabled={!selectedAscApp || isUploading}
+              aria-label="Upload screenshot to App Store Connect"
+            >
+              {isUploading ? 'Uploading...' : 'Upload'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

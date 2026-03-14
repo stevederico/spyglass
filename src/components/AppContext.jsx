@@ -23,9 +23,14 @@ function restoreSelectedApp() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    if (parsed?.id && parsed?.name) return parsed;
+    // Clear entries where name is missing or is a raw ID
+    if (!parsed?.id || !parsed?.name || parsed.name === parsed.id) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return parsed;
   } catch {
-    // Corrupt storage, ignore
+    localStorage.removeItem(STORAGE_KEY);
   }
   return null;
 }
@@ -41,8 +46,19 @@ function restoreSelectedApp() {
  * @param {React.ReactNode} props.children - Child components
  * @returns {JSX.Element} Provider wrapping children
  */
+/**
+ * Get initial apps list, seeding with any persisted local app
+ *
+ * @returns {Array} Initial apps array
+ */
+function getInitialApps() {
+  const restored = restoreSelectedApp();
+  if (restored?.id?.startsWith('local-')) return [restored];
+  return [];
+}
+
 export function AppProvider({ children }) {
-  const [apps, setApps] = useState([]);
+  const [apps, setApps] = useState(getInitialApps);
   const [selectedApp, setSelectedAppState] = useState(restoreSelectedApp);
   const [isLoadingApps, setIsLoadingApps] = useState(false);
   const [isConnected, setIsConnected] = useState(true);
@@ -51,13 +67,6 @@ export function AppProvider({ children }) {
   useEffect(() => {
     async function fetchApps() {
       setIsLoadingApps(true);
-
-      // Seed with the persisted local app so it's immediately available
-      const restored = restoreSelectedApp();
-      if (restored?.id?.startsWith('local-')) {
-        setApps([restored]);
-      }
-
       try {
         const result = await apiRequest('/asc/apps');
         if (result?.data) {
