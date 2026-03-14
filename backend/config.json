@@ -1,0 +1,8 @@
+{
+  "staticDir": "../dist",
+  "database": {
+    "db": "Spyglass",
+    "dbType": "sqlite",
+    "connectionString": "./databases/Spyglass.db"
+  }
+}
