@@ -1,27 +1,26 @@
 /**
- * Unified exports view combining screenshots and metadata management
+ * Exports view for managing App Store Connect screenshots
  *
- * Provides filtering by app, language, and device type. Displays a responsive
- * grid of screenshot thumbnails with upload/delete capabilities, and an
- * editable metadata form for App Store Connect localized listings.
+ * Provides filtering by language and device type. Displays a responsive
+ * grid of screenshot thumbnails with upload/delete capabilities.
+ * Uses shared AppContext for app selection via the Header AppPicker.
  *
  * @component
- * @returns {JSX.Element} Combined screenshots and metadata management interface
+ * @returns {JSX.Element} Screenshot management interface
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Header from '@stevederico/skateboard-ui/Header';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@stevederico/skateboard-ui/shadcn/ui/card';
-import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
+import { Card, CardContent } from '@stevederico/skateboard-ui/shadcn/ui/card';
 import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
-import { Textarea } from '@stevederico/skateboard-ui/shadcn/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
 import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
-import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
 import { AspectRatio } from '@stevederico/skateboard-ui/shadcn/ui/aspect-ratio';
 import { Alert, AlertDescription } from '@stevederico/skateboard-ui/shadcn/ui/alert';
 import { toast } from 'sonner';
+import { useApp } from './AppContext.jsx';
+import AppPicker from './AppPicker.jsx';
 
 /** App Store Connect locale options */
 const LOCALES = [
@@ -59,28 +58,17 @@ const LOCALES = [
 /** Device display type options for App Store Connect screenshots */
 const DEVICE_TYPES = [
   { code: 'all', name: 'All Devices' },
-  { code: 'APP_IPHONE_69', name: 'iPhone 16 Pro Max (6.9")' },
-  { code: 'APP_IPHONE_67', name: 'iPhone 16 Plus (6.7")' },
-  { code: 'APP_IPHONE_65', name: 'iPhone 16 Pro (6.3")' },
-  { code: 'APP_IPHONE_61', name: 'iPhone 16 (6.1")' },
-  { code: 'APP_IPHONE_55', name: 'iPhone 8 Plus (5.5")' },
-  { code: 'APP_IPHONE_47', name: 'iPhone SE (4.7")' },
-  { code: 'APP_IPAD_PRO_13', name: 'iPad Pro 13" (M4)' },
-  { code: 'APP_IPAD_PRO_129', name: 'iPad Pro 12.9"' },
-  { code: 'APP_IPAD_AIR_11', name: 'iPad Air 11"' },
+  { code: 'APP_IPHONE_69', name: 'iPhone 6.9"' },
+  { code: 'APP_IPHONE_67', name: 'iPhone 6.7"' },
+  { code: 'APP_IPHONE_65', name: 'iPhone 6.3"' },
+  { code: 'APP_IPHONE_61', name: 'iPhone 6.1"' },
+  { code: 'APP_IPHONE_55', name: 'iPhone 5.5"' },
+  { code: 'APP_IPHONE_47', name: 'iPhone 4.7"' },
+  { code: 'APP_IPAD_PRO_13', name: 'iPad 13"' },
+  { code: 'APP_IPAD_PRO_129', name: 'iPad 12.9"' },
+  { code: 'APP_IPAD_AIR_11', name: 'iPad 11"' },
   { code: 'APP_IPAD_105', name: 'iPad 10.5"' }
 ];
-
-/** Initial empty metadata state */
-const EMPTY_METADATA = {
-  name: '',
-  subtitle: '',
-  description: '',
-  keywords: '',
-  whatsNew: '',
-  supportUrl: '',
-  marketingUrl: ''
-};
 
 /**
  * Determine if a device code represents an iPad
@@ -90,29 +78,6 @@ const EMPTY_METADATA = {
  */
 function isIPad(code) {
   return code.startsWith('APP_IPAD');
-}
-
-/**
- * Character count indicator with color feedback
- *
- * @component
- * @param {Object} props
- * @param {number} props.current - Current character count
- * @param {number} props.max - Maximum allowed characters
- * @returns {JSX.Element} Styled character count display
- */
-function CharCount({ current, max }) {
-  const isNearLimit = current > max * 0.9;
-  const isOverLimit = current > max;
-
-  return (
-    <span
-      className={`text-xs ${isOverLimit ? 'text-red-500' : isNearLimit ? 'text-yellow-500' : 'text-muted-foreground'}`}
-      aria-live="polite"
-    >
-      {current}/{max}
-    </span>
-  );
 }
 
 /**
@@ -262,44 +227,23 @@ function UploadDropZone({ onUpload, isUploading }) {
 }
 
 export default function ExportsView() {
-  const [apps, setApps] = useState([]);
-  const [isLoadingApps, setIsLoadingApps] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
-  const [selectedApp, setSelectedApp] = useState('');
-  const [appNameInput, setAppNameInput] = useState('');
+  const { selectedApp, isConnected } = useApp();
   const [selectedLocale, setSelectedLocale] = useState('all');
   const [selectedDevice, setSelectedDevice] = useState('all');
 
   const [screenshots, setScreenshots] = useState([]);
   const [isLoadingScreenshots, setIsLoadingScreenshots] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const headerFileInputRef = useRef(null);
 
-  const [metadata, setMetadata] = useState(EMPTY_METADATA);
-  const [isLoadingMeta, setIsLoadingMeta] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-
-  /** Fetch the list of apps from App Store Connect on mount */
+  /** Fetch screenshots when the selected app changes */
   useEffect(() => {
-    fetchApps();
-  }, []);
-
-  /** Fetch apps, set connected state based on response */
-  async function fetchApps() {
-    setIsLoadingApps(true);
-    try {
-      const result = await apiRequest('/asc/apps');
-      if (result?.data) {
-        setApps(result.data);
-        setIsConnected(true);
-      } else {
-        setIsConnected(false);
-      }
-    } catch {
-      setIsConnected(false);
-    } finally {
-      setIsLoadingApps(false);
+    if (!selectedApp?.id) {
+      setScreenshots([]);
+      return;
     }
-  }
+    fetchScreenshots(selectedApp.id);
+  }, [selectedApp?.id]);
 
   /**
    * Fetch screenshots for the selected app
@@ -321,80 +265,12 @@ export default function ExportsView() {
   }
 
   /**
-   * Fetch metadata for the selected app
-   *
-   * @param {string} appId - App Store Connect app identifier
-   */
-  const fetchMetadata = useCallback(async (appId) => {
-    if (!appId) return;
-    setIsLoadingMeta(true);
-    try {
-      const result = await apiRequest(`/asc/apps/${appId}/metadata`);
-      if (result?.data) {
-        const attrs = result.data.attributes || {};
-        setMetadata({
-          name: attrs.name || '',
-          subtitle: attrs.subtitle || '',
-          description: attrs.description || '',
-          keywords: attrs.keywords || '',
-          whatsNew: attrs.whatsNew || '',
-          supportUrl: attrs.supportUrl || '',
-          marketingUrl: attrs.marketingUrl || ''
-        });
-      }
-    } catch {
-      toast.error('Failed to load metadata');
-      setMetadata(EMPTY_METADATA);
-    } finally {
-      setIsLoadingMeta(false);
-    }
-  }, []);
-
-  /**
-   * Handle app selection change and fetch its data
-   *
-   * @param {string} appId - Selected app identifier
-   */
-  function handleAppChange(appId) {
-    setSelectedApp(appId);
-    fetchScreenshots(appId);
-    fetchMetadata(appId);
-  }
-
-  /**
-   * Update a single metadata field
-   *
-   * @param {string} field - Field name in metadata state
-   * @param {string} value - New field value
-   */
-  function handleFieldChange(field, value) {
-    setMetadata((prev) => ({ ...prev, [field]: value }));
-  }
-
-  /** Save metadata changes to App Store Connect */
-  async function handleSaveMetadata() {
-    if (!selectedApp) return;
-    setIsSaving(true);
-    try {
-      await apiRequest(`/asc/apps/${selectedApp}/metadata`, {
-        method: 'PATCH',
-        body: JSON.stringify(metadata)
-      });
-      toast.success('Metadata saved successfully');
-    } catch {
-      toast.error('Failed to save metadata');
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  /**
    * Upload a screenshot file for the selected app
    *
    * @param {File} file - Image file to upload
    */
   async function handleUploadScreenshot(file) {
-    if (!selectedApp) {
+    if (!selectedApp?.id) {
       toast.error('Select an app first');
       return;
     }
@@ -405,12 +281,12 @@ export default function ExportsView() {
       if (selectedLocale !== 'all') formData.append('locale', selectedLocale);
       if (selectedDevice !== 'all') formData.append('deviceType', selectedDevice);
 
-      await apiRequest(`/asc/apps/${selectedApp}/screenshots`, {
+      await apiRequest(`/asc/apps/${selectedApp.id}/screenshots`, {
         method: 'POST',
         body: formData
       });
       toast.success('Screenshot uploaded');
-      await fetchScreenshots(selectedApp);
+      await fetchScreenshots(selectedApp.id);
     } catch {
       toast.error('Failed to upload screenshot');
     } finally {
@@ -444,58 +320,47 @@ export default function ExportsView() {
 
   return (
     <>
-      <Header title="Exports" />
+      <Header title="Exports">
+        <AppPicker />
+        <div className="ml-auto flex items-center gap-2">
+          {selectedApp && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => headerFileInputRef.current?.click()}
+                disabled={isUploading}
+                aria-label="Upload screenshot"
+              >
+                {isUploading ? 'Uploading...' : 'Upload'}
+              </Button>
+              <input
+                ref={headerFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleUploadScreenshot(file);
+                  e.target.value = '';
+                }}
+                className="hidden"
+                aria-hidden="true"
+              />
+            </>
+          )}
+        </div>
+      </Header>
+      {!selectedApp ? (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-muted-foreground">Select an app to get started</p>
+        </div>
+      ) : (
       <div className="flex flex-1 flex-col">
         <div className="flex flex-col gap-6 p-4 md:p-6">
-
-          {/* ASC not connected info banner */}
-          {!isConnected && (
-            <Alert>
-              <AlertDescription>
-                Connect to App Store Connect in{' '}
-                <a href="/settings" className="font-medium text-blue-500 underline" aria-label="Go to Settings to connect App Store Connect">
-                  Settings
-                </a>{' '}
-                to manage screenshots and metadata directly. The page is still usable for viewing local exports.
-              </AlertDescription>
-            </Alert>
-          )}
 
           {/* Filter Bar */}
           <Card>
             <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-end sm:flex-wrap">
-              {/* App selector */}
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="export-app-select">App</Label>
-                {isConnected ? (
-                  <Select value={selectedApp} onValueChange={handleAppChange}>
-                    <SelectTrigger id="export-app-select" className="w-56" aria-label="Select an app">
-                      <SelectValue placeholder="Select an app" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isLoadingApps ? (
-                        <SelectItem value="_loading" disabled>Loading...</SelectItem>
-                      ) : (
-                        apps.map((app) => (
-                          <SelectItem key={app.id} value={app.id}>
-                            {app.attributes?.name || app.id}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    id="export-app-select"
-                    value={appNameInput}
-                    onChange={(e) => setAppNameInput(e.target.value)}
-                    placeholder="Enter app name"
-                    className="w-56"
-                    aria-label="Enter app name manually"
-                  />
-                )}
-              </div>
-
               {/* Language filter */}
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="export-locale-select">Language</Label>
@@ -562,154 +427,22 @@ export default function ExportsView() {
             )}
           </section>
 
-          <Separator />
-
-          {/* Metadata Section */}
-          <section aria-label="Metadata">
-            <h2 className="mb-3 text-lg font-semibold">Metadata</h2>
-
-            {isLoadingMeta ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-sm text-muted-foreground" role="status">Loading metadata...</p>
-              </div>
-            ) : (
-              <Card>
-                <CardContent className="flex flex-col gap-5 p-4 md:p-6">
-                  {/* App Name */}
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="export-meta-name">App Name</Label>
-                      <CharCount current={metadata.name.length} max={30} />
-                    </div>
-                    <Input
-                      id="export-meta-name"
-                      value={metadata.name}
-                      onChange={(e) => handleFieldChange('name', e.target.value)}
-                      maxLength={30}
-                      placeholder="My App"
-                      aria-label="App name, maximum 30 characters"
-                    />
-                  </div>
-
-                  {/* Subtitle */}
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="export-meta-subtitle">Subtitle</Label>
-                      <CharCount current={metadata.subtitle.length} max={30} />
-                    </div>
-                    <Input
-                      id="export-meta-subtitle"
-                      value={metadata.subtitle}
-                      onChange={(e) => handleFieldChange('subtitle', e.target.value)}
-                      maxLength={30}
-                      placeholder="A brief subtitle"
-                      aria-label="App subtitle, maximum 30 characters"
-                    />
-                  </div>
-
-                  <Separator />
-
-                  {/* Description */}
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="export-meta-description">Description</Label>
-                      <CharCount current={metadata.description.length} max={4000} />
-                    </div>
-                    <Textarea
-                      id="export-meta-description"
-                      value={metadata.description}
-                      onChange={(e) => handleFieldChange('description', e.target.value)}
-                      maxLength={4000}
-                      rows={6}
-                      placeholder="Describe your app..."
-                      aria-label="App description, maximum 4000 characters"
-                    />
-                  </div>
-
-                  {/* Keywords */}
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="export-meta-keywords">Keywords</Label>
-                      <CharCount current={metadata.keywords.length} max={100} />
-                    </div>
-                    <Input
-                      id="export-meta-keywords"
-                      value={metadata.keywords}
-                      onChange={(e) => handleFieldChange('keywords', e.target.value)}
-                      maxLength={100}
-                      placeholder="keyword1, keyword2, keyword3"
-                      aria-label="Keywords, comma-separated, maximum 100 characters"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Separate keywords with commas
-                    </p>
-                  </div>
-
-                  <Separator />
-
-                  {/* What's New */}
-                  <div className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="export-meta-whats-new">What's New</Label>
-                      <CharCount current={metadata.whatsNew.length} max={4000} />
-                    </div>
-                    <Textarea
-                      id="export-meta-whats-new"
-                      value={metadata.whatsNew}
-                      onChange={(e) => handleFieldChange('whatsNew', e.target.value)}
-                      maxLength={4000}
-                      rows={4}
-                      placeholder="Describe what's new in this version..."
-                      aria-label="What's new release notes, maximum 4000 characters"
-                    />
-                  </div>
-
-                  <Separator />
-
-                  {/* Support URL */}
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="export-meta-support-url">Support URL</Label>
-                    <Input
-                      id="export-meta-support-url"
-                      type="url"
-                      value={metadata.supportUrl}
-                      onChange={(e) => handleFieldChange('supportUrl', e.target.value)}
-                      placeholder="https://example.com/support"
-                      aria-label="Support URL"
-                    />
-                  </div>
-
-                  {/* Marketing URL */}
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="export-meta-marketing-url">Marketing URL</Label>
-                    <Input
-                      id="export-meta-marketing-url"
-                      type="url"
-                      value={metadata.marketingUrl}
-                      onChange={(e) => handleFieldChange('marketingUrl', e.target.value)}
-                      placeholder="https://example.com"
-                      aria-label="Marketing URL"
-                    />
-                  </div>
-
-                  <Separator />
-
-                  <div className="flex justify-end">
-                    <Button
-                      onClick={handleSaveMetadata}
-                      disabled={isSaving || !selectedApp}
-                      aria-label="Save metadata changes to App Store Connect"
-                    >
-                      {isSaving ? 'Saving...' : 'Save to App Store Connect'}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </section>
+          {/* ASC not connected info */}
+          {!isConnected && (
+            <Alert>
+              <AlertDescription>
+                Connect to App Store Connect in{' '}
+                <a href="/settings" className="font-medium text-blue-500 underline" aria-label="Go to Settings to connect App Store Connect">
+                  Settings
+                </a>{' '}
+                to manage screenshots and metadata directly. The page is still usable for viewing local exports.
+              </AlertDescription>
+            </Alert>
+          )}
 
         </div>
       </div>
+      )}
     </>
   );
 }

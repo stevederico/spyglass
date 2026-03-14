@@ -31,7 +31,8 @@
     "backendURL": "/api",
     "devBackendURL": "http://localhost:8000/api",
     "pages": [
-        { "title": "Studio", "url": "home", "icon": "palette" },
+        { "title": "Screenshots", "url": "home", "icon": "camera" },
+        { "title": "Metadata", "url": "metadata", "icon": "file-text" },
         { "title": "Exports", "url": "exports", "icon": "download" }
     ],
     "stripeProducts": [

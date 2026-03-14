@@ -12,7 +12,9 @@ import { createSkateboardApp } from '@stevederico/skateboard-ui/App';
 import constants from './constants.json';
 import StudioView from './components/StudioView.jsx';
 import ExportsView from './components/ExportsView.jsx';
+import MetadataView from './components/MetadataView.jsx';
 import SettingsView from './components/SettingsView.jsx';
+import { AppProvider } from './components/AppContext.jsx';
 
 /**
  * Application route configuration
@@ -21,6 +23,7 @@ import SettingsView from './components/SettingsView.jsx';
  */
 const appRoutes = [
   { path: 'home', element: <StudioView /> },
+  { path: 'metadata', element: <MetadataView /> },
   { path: 'exports', element: <ExportsView /> }
 ];
 
@@ -37,6 +40,7 @@ createSkateboardApp({
   constants,
   appRoutes,
   defaultRoute: 'home',
+  wrapper: AppProvider,
   overrides: {
     settings: SettingsView
   }

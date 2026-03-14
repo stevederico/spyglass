@@ -42,17 +42,17 @@ Built on [Skateboard](https://github.com/stevederico/skateboard) with React 19, 
 
 ## Supported Devices
 
-| Device | Resolution |
+| Display Size | Resolution |
 |---|---|
-| iPhone 16 Pro Max (6.9") | 1320 x 2868 |
-| iPhone 16 Plus (6.7") | 1290 x 2796 |
-| iPhone 16 Pro (6.3") | 1206 x 2622 |
-| iPhone 16 (6.1") | 1179 x 2556 |
-| iPhone 8 Plus (5.5") | 1242 x 2208 |
-| iPhone SE (4.7") | 750 x 1334 |
-| iPad Pro 13" (M4) | 2064 x 2752 |
-| iPad Pro 12.9" (6th gen) | 2048 x 2732 |
-| iPad Air 11" (M3) | 1668 x 2388 |
+| iPhone 6.9" | 1320 x 2868 |
+| iPhone 6.7" | 1290 x 2796 |
+| iPhone 6.3" | 1206 x 2622 |
+| iPhone 6.1" | 1179 x 2556 |
+| iPhone 5.5" | 1242 x 2208 |
+| iPhone 4.7" | 750 x 1334 |
+| iPad 13" | 2064 x 2752 |
+| iPad 12.9" | 2048 x 2732 |
+| iPad 11" | 1668 x 2388 |
 | iPad 10.5" | 1668 x 2224 |
 
 ## Supported Locales

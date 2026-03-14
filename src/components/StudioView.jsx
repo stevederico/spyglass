@@ -26,6 +26,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
 import { toast } from 'sonner';
 import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG } from './composerHelpers.js';
+import { useApp } from './AppContext.jsx';
+import AppPicker from './AppPicker.jsx';
 
 /** Device key options for the device select dropdown */
 const DEVICE_OPTIONS = Object.entries(DEVICES).map(([key, val]) => ({
@@ -100,6 +102,7 @@ function getStatusBadge(status) {
 }
 
 export default function StudioView() {
+  const { selectedApp } = useApp();
   const canvasRef = useRef(null);
 
   // Background state
@@ -337,7 +340,14 @@ export default function StudioView() {
 
   return (
     <>
-      <Header title="Studio" />
+      <Header title="Studio">
+        <AppPicker />
+      </Header>
+      {!selectedApp ? (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-muted-foreground">Select an app to get started</p>
+        </div>
+      ) : (
       <div className="flex flex-1 flex-col">
         <div className="flex flex-col gap-4 p-4 md:p-6 lg:flex-row">
 
@@ -745,6 +755,7 @@ export default function StudioView() {
           </aside>
         </div>
       </div>
+      )}
     </>
   );
 }
