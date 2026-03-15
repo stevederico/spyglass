@@ -1,0 +1,25 @@
+{
+  "name": "@spyglass/cli",
+  "version": "0.1.0",
+  "description": "CLI companion for Spyglass — iOS App Store screenshot automation",
+  "type": "module",
+  "bin": {
+    "spyglass": "./bin/spyglass.js"
+  },
+  "scripts": {
+    "start": "node bin/spyglass.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.68",
+    "jsonwebtoken": "^9.0.2",
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}

@@ -51,15 +51,28 @@ function restoreSelectedApp() {
  *
  * @returns {Array} Initial apps array
  */
+/** Default app created automatically so users can start working immediately */
+const DEFAULT_APP = { id: 'local-default', name: 'My App' };
+
+/**
+ * Get initial apps list, seeding with persisted local app or default
+ *
+ * @returns {Array} Initial apps array
+ */
 function getInitialApps() {
   const restored = restoreSelectedApp();
   if (restored?.id?.startsWith('local-')) return [restored];
-  return [];
+  return [DEFAULT_APP];
 }
 
 export function AppProvider({ children }) {
   const [apps, setApps] = useState(getInitialApps);
-  const [selectedApp, setSelectedAppState] = useState(restoreSelectedApp);
+  const [selectedApp, setSelectedAppState] = useState(() => {
+    const restored = restoreSelectedApp();
+    if (restored) return restored;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_APP));
+    return DEFAULT_APP;
+  });
   const [isLoadingApps, setIsLoadingApps] = useState(false);
   /** Fetch app list from App Store Connect, seed local apps from localStorage */
   useEffect(() => {

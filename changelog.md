@@ -4,6 +4,13 @@
 - ASO keyword tool
 - CLI tool (browserless usage)
 
+0.8.1
+
+  Add default app auto-select
+  Add CLI scaffold
+  Fix text layout positioning
+  Remove legacy device sizes
+
 0.8.0
 
   Add session state persistence

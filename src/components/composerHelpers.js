@@ -14,8 +14,6 @@ export const DEVICES = {
   'iphone-67':  { label: 'iPhone 6.7"', width: 1290, height: 2796, radius: 120, bezelWidth: 18 },
   'iphone-65':  { label: 'iPhone 6.3"', width: 1206, height: 2622, radius: 115, bezelWidth: 16 },
   'iphone-61':  { label: 'iPhone 6.1"', width: 1179, height: 2556, radius: 110, bezelWidth: 16 },
-  'iphone-55':  { label: 'iPhone 5.5"', width: 1242, height: 2208, radius: 0, bezelWidth: 14 },
-  'iphone-47':  { label: 'iPhone 4.7"', width: 750, height: 1334, radius: 0, bezelWidth: 12 },
   'ipad-13':    { label: 'iPad 13"', width: 2064, height: 2752, radius: 50, bezelWidth: 22 },
   'ipad-129':   { label: 'iPad 12.9"', width: 2048, height: 2732, radius: 40, bezelWidth: 20 },
   'ipad-11':    { label: 'iPad 11"', width: 1668, height: 2388, radius: 40, bezelWidth: 18 },
@@ -347,9 +345,38 @@ export function drawComposite(canvas, state) {
   const layout = state.frameLayout || 'full';
   const isFullscreen = layout === 'fullscreen';
   const isZoomed = layout === 'zoomed';
-  const padding = ch * 0.12;
-  const textAreaHeight = isFullscreen ? 0 : ch * (isZoomed ? 0.15 : 0.15);
   const isTop = state.textPosition === 'top';
+
+  // --- Text area layout ---
+  // Canvas fillText uses textBaseline='alphabetic' by default.
+  // y = baseline position. Ascenders extend ~0.8× fontSize above baseline.
+  // So to place text with its visual top at Y, set baseline = Y + fontSize * 0.8.
+  //
+  // Layout (text on top):
+  //   topMargin -> headline baseline -> gap -> subtitle baseline -> bottomGap -> device
+  //
+  const scaledFont = state.fontSize * (cw / 1290);
+  const hasHeadline = vis.headline !== false && state.textLine1;
+  const hasSubtitle = state.textLine2;
+
+  // Equal margin above headline visual top and below subtitle visual bottom.
+  // Canvas fillText baseline='alphabetic': ascenders ~0.8× font, descenders ~0.4× font.
+  const textMargin = scaledFont * 0.9;
+
+  // Headline baseline Y (visual top = textMargin, baseline = visual top + ascender)
+  const headlineBaselineY = textMargin + scaledFont * 0.8;
+  // Subtitle baseline Y
+  const subtitleBaselineY = headlineBaselineY + scaledFont * 1.4;
+
+  // Visual bottom of the last text line
+  const textVisualBottom = hasSubtitle
+    ? subtitleBaselineY + scaledFont * 0.75 * 0.4
+    : hasHeadline
+      ? headlineBaselineY + scaledFont * 0.4
+      : 0;
+
+  // textAreaHeight = visual bottom + same margin as top (symmetric)
+  const textAreaHeight = isFullscreen ? 0 : textVisualBottom + textMargin;
 
   // Device screen dimensions, swapped for landscape
   const devW = isLandscape ? deviceInfo.height : deviceInfo.width;
@@ -369,11 +396,11 @@ export function drawComposite(canvas, state) {
     frameW = devW * screenScale;
     frameH = devH * screenScale;
     frameX = (cw - frameW) / 2;
-    frameY = isTop ? textAreaHeight + padding * 0.3 : padding * 0.3;
+    frameY = isTop ? textAreaHeight : scaledFont * 0.5;
   } else {
     // Normal: fit entire device within available space
-    frameY = isTop ? textAreaHeight + padding * 0.5 : padding * 0.5;
-    const availableHeight = ch - textAreaHeight - padding;
+    frameY = isTop ? textAreaHeight : scaledFont * 0.5;
+    const availableHeight = ch - textAreaHeight - scaledFont * 0.5;
     screenScale = Math.min((cw * 0.85) / devW, availableHeight / devH);
     frameW = devW * screenScale;
     frameH = devH * screenScale;
@@ -444,7 +471,6 @@ export function drawComposite(canvas, state) {
 
   const textMaxWidth = cw * 0.8;
   const weightValue = FONT_WEIGHTS[state.fontWeight] || '700';
-  const scaledFontSize = state.fontSize * (cw / 1290);
   const autoFitMaxHeight = state.autoFitText !== false ? textAreaHeight : undefined;
   const fontFamily = state.fontFamily || '';
 
@@ -452,20 +478,35 @@ export function drawComposite(canvas, state) {
   const showSubheadline = vis.subheadline && state.editingLine !== 2;
 
   if (isTop) {
-    const textY1 = padding * 0.6;
+    // When subtitle is hidden, center headline vertically in the text area
+    const headlineOnly = showHeadline && !showSubheadline;
+    const drawHeadlineY = headlineOnly
+      ? textAreaHeight / 2 - scaledFont * 0.6 + scaledFont * 0.8
+      : headlineBaselineY;
+    const drawSubtitleY = headlineOnly
+      ? 0
+      : subtitleBaselineY;
+
     if (showHeadline) {
-      drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
+      drawMarketingText(ctx, state.textLine1, cw / 2, drawHeadlineY, textMaxWidth, scaledFont, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
     if (state.textLine2 && showSubheadline) {
-      drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
+      drawMarketingText(ctx, state.textLine2, cw / 2, drawSubtitleY, textMaxWidth, scaledFont * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
   } else {
-    const textY1 = frameY + frameH + padding * 0.5;
+    // Text below device
+    const bottomHeadlineOnly = showHeadline && !showSubheadline;
+    const bottomAreaTop = frameY + frameH;
+    const bottomAreaHeight = ch - bottomAreaTop;
+    const bottomTextY1 = bottomHeadlineOnly
+      ? bottomAreaTop + bottomAreaHeight / 2 - scaledFont * 0.6 + scaledFont * 0.8
+      : frameY + frameH + textMargin + scaledFont * 0.8;
+
     if (showHeadline) {
-      drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
+      drawMarketingText(ctx, state.textLine1, cw / 2, bottomTextY1, textMaxWidth, scaledFont, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
     if (state.textLine2 && showSubheadline) {
-      drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
+      drawMarketingText(ctx, state.textLine2, cw / 2, bottomTextY1 + scaledFont * 1.4, textMaxWidth, scaledFont * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
   }
 }
