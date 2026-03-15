@@ -1,7 +1,7 @@
 {
     "version": "0.2.0",
     "appName": "Spyglass",
-    "appIcon": "eye",
+    "appIcon": "telescope",
     "tagline": "App Store screenshots, done right.",
     "cta": "Get Started",
     "ctaHeading": "Ready to Get Started?",

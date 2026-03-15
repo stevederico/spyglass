@@ -83,7 +83,7 @@ function buildFontString(fontWeight, fontSize, fontFamily) {
  * @param {string} [fontFamily] - Optional custom font family name
  * @returns {{ fontSize: number, lines: string[] }} Fitted font size and wrapped lines
  */
-export function fitTextToBox(ctx, text, maxWidth, maxHeight, initialFontSize, fontWeight, fontFamily) {
+function fitTextToBox(ctx, text, maxWidth, maxHeight, initialFontSize, fontWeight, fontFamily) {
   const MIN_FONT_SIZE = 16;
   let fontSize = initialFontSize;
 
@@ -139,7 +139,7 @@ export function fitTextToBox(ctx, text, maxWidth, maxHeight, initialFontSize, fo
  * @param {number} h - Rectangle height
  * @param {number} r - Corner radius in pixels
  */
-export function drawRoundedRect(ctx, x, y, w, h, r) {
+function drawRoundedRect(ctx, x, y, w, h, r) {
   const radius = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
@@ -170,7 +170,7 @@ export function drawRoundedRect(ctx, x, y, w, h, r) {
  * @param {string} settings.gradientDirection - Gradient direction: "top-bottom", "left-right", or "diagonal"
  * @param {HTMLImageElement|null} settings.bgImage - Optional background image element
  */
-export function drawBackground(ctx, w, h, settings) {
+function drawBackground(ctx, w, h, settings) {
   const { bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage } = settings;
 
   if (bgImage) {
@@ -213,7 +213,7 @@ export function drawBackground(ctx, w, h, settings) {
  * @param {number} radius - Screen corner radius
  * @param {number} bezelWidth - Bezel border width in pixels
  */
-export function drawDeviceFrame(ctx, x, y, w, h, radius, bezelWidth) {
+function drawDeviceFrame(ctx, x, y, w, h, radius, bezelWidth) {
   ctx.fillStyle = '#1a1a1a';
   drawRoundedRect(ctx, x - bezelWidth, y - bezelWidth, w + bezelWidth * 2, h + bezelWidth * 2, radius + bezelWidth);
   ctx.fill();
@@ -241,7 +241,7 @@ export function drawDeviceFrame(ctx, x, y, w, h, radius, bezelWidth) {
  * @param {number} [maxHeight] - Optional max height to auto-fit text into
  * @param {string} [fontFamily] - Optional custom font family name
  */
-export function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, hasShadow, fontWeight, maxHeight, fontFamily) {
+function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, hasShadow, fontWeight, maxHeight, fontFamily) {
   if (!text) return;
 
   ctx.fillStyle = color;
@@ -314,6 +314,10 @@ export function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, ha
  * @param {boolean} [state.autoFitText=true] - Whether to auto-shrink text to fit
  * @param {string} [state.fontFamily] - Optional custom font family name
  * @param {number} [state.editingLine] - Line number being inline-edited (1 or 2); skipped during draw
+ * @param {HTMLImageElement|null} [state.frameImage] - Loaded device frame PNG overlay
+ * @param {Object|null} [state.frameModelInfo] - Frame model info from FRAME_MODELS
+ * @param {'full'|'zoomed'} [state.frameLayout='full'] - Device layout: "full" fits entire device, "zoomed" scales wider and clips bottom
+ * @param {Object} [state.layers] - Layer visibility flags { background, device, headline, subheadline }
  */
 export function drawComposite(canvas, state) {
   const ctx = canvas.getContext('2d');
@@ -324,43 +328,108 @@ export function drawComposite(canvas, state) {
   canvas.height = ch;
   ctx.clearRect(0, 0, cw, ch);
 
-  drawBackground(ctx, cw, ch, {
-    bgColor: state.bgColor,
-    isGradient: state.isGradient,
-    gradientStart: state.gradientStart,
-    gradientEnd: state.gradientEnd,
-    gradientDirection: state.gradientDirection,
-    bgImage: state.bgImage
-  });
+  const vis = state.layers || { background: true, device: true, headline: true, subheadline: true };
 
+  if (vis.background) {
+    drawBackground(ctx, cw, ch, {
+      bgColor: state.bgColor,
+      isGradient: state.isGradient,
+      gradientStart: state.gradientStart,
+      gradientEnd: state.gradientEnd,
+      gradientDirection: state.gradientDirection,
+      bgImage: state.bgImage
+    });
+  }
+
+  const layout = state.frameLayout || 'full';
+  const isFullscreen = layout === 'fullscreen';
+  const isZoomed = layout === 'zoomed';
   const padding = ch * 0.12;
-  const textAreaHeight = ch * 0.15;
+  const textAreaHeight = isFullscreen ? 0 : ch * (isZoomed ? 0.12 : 0.15);
   const isTop = state.textPosition === 'top';
 
-  const frameY = isTop ? textAreaHeight + padding * 0.5 : padding * 0.5;
-  const availableHeight = ch - textAreaHeight - padding;
-  const screenScale = Math.min((cw * 0.85) / deviceInfo.width, availableHeight / deviceInfo.height);
-  const frameW = deviceInfo.width * screenScale;
-  const frameH = deviceInfo.height * screenScale;
-  const frameX = (cw - frameW) / 2;
+  let screenScale, frameX, frameY, frameW, frameH;
+  if (isFullscreen) {
+    // Fullscreen: screenshot fills entire canvas, no frame
+    screenScale = 1;
+    frameX = 0;
+    frameY = 0;
+    frameW = cw;
+    frameH = ch;
+  } else if (isZoomed) {
+    // Zoomed: scale device to ~90% canvas width, let bottom overflow off-canvas
+    screenScale = (cw * 0.90) / deviceInfo.width;
+    frameW = deviceInfo.width * screenScale;
+    frameH = deviceInfo.height * screenScale;
+    frameX = (cw - frameW) / 2;
+    frameY = isTop ? textAreaHeight + padding * 0.3 : padding * 0.3;
+  } else {
+    // Normal: fit entire device within available space
+    frameY = isTop ? textAreaHeight + padding * 0.5 : padding * 0.5;
+    const availableHeight = ch - textAreaHeight - padding;
+    screenScale = Math.min((cw * 0.85) / deviceInfo.width, availableHeight / deviceInfo.height);
+    frameW = deviceInfo.width * screenScale;
+    frameH = deviceInfo.height * screenScale;
+    frameX = (cw - frameW) / 2;
+  }
   const scaledRadius = deviceInfo.radius * screenScale;
   const scaledBezel = deviceInfo.bezelWidth * screenScale;
 
-  ctx.save();
-  if (state.showBezel) {
-    drawDeviceFrame(ctx, frameX, frameY, frameW, frameH, scaledRadius, scaledBezel);
-  } else {
-    drawRoundedRect(ctx, frameX, frameY, frameW, frameH, scaledRadius);
-    ctx.clip();
+  if (vis.device && isFullscreen) {
+    // Fullscreen: screenshot fills entire canvas, no frame or bezel
+    if (state.screenshotImage) {
+      ctx.drawImage(state.screenshotImage, 0, 0, cw, ch);
+    } else {
+      ctx.fillStyle = '#2a2a3e';
+      ctx.fillRect(0, 0, cw, ch);
+    }
+  } else if (vis.device) {
+    const hasFramePNG = state.frameImage && state.frameModelInfo;
+
+    if (hasFramePNG) {
+      const model = state.frameModelInfo;
+      const screenInsetX = (model.frameWidth - model.screenWidth) / 2;
+      const screenInsetY = (model.frameHeight - model.screenHeight) / 2;
+      const pngScale = frameW / model.screenWidth;
+
+      // Draw screenshot clipped to screen area
+      ctx.save();
+      drawRoundedRect(ctx, frameX, frameY, frameW, frameH, scaledRadius);
+      ctx.clip();
+      if (state.screenshotImage) {
+        ctx.drawImage(state.screenshotImage, frameX, frameY, frameW, frameH);
+      } else {
+        ctx.fillStyle = '#2a2a3e';
+        ctx.fillRect(frameX, frameY, frameW, frameH);
+      }
+      ctx.restore();
+
+      // Overlay frame PNG on top
+      const framePngX = frameX - screenInsetX * pngScale;
+      const framePngY = frameY - screenInsetY * pngScale;
+      const framePngW = model.frameWidth * pngScale;
+      const framePngH = model.frameHeight * pngScale;
+      ctx.drawImage(state.frameImage, framePngX, framePngY, framePngW, framePngH);
+    } else {
+      ctx.save();
+      if (state.showBezel) {
+        drawDeviceFrame(ctx, frameX, frameY, frameW, frameH, scaledRadius, scaledBezel);
+      } else {
+        drawRoundedRect(ctx, frameX, frameY, frameW, frameH, scaledRadius);
+        ctx.clip();
+      }
+
+      if (state.screenshotImage) {
+        ctx.drawImage(state.screenshotImage, frameX, frameY, frameW, frameH);
+      } else {
+        ctx.fillStyle = '#2a2a3e';
+        ctx.fillRect(frameX, frameY, frameW, frameH);
+      }
+      ctx.restore();
+    }
   }
 
-  if (state.screenshotImage) {
-    ctx.drawImage(state.screenshotImage, frameX, frameY, frameW, frameH);
-  } else {
-    ctx.fillStyle = '#2a2a3e';
-    ctx.fillRect(frameX, frameY, frameW, frameH);
-  }
-  ctx.restore();
+  if (isFullscreen) return;
 
   const textMaxWidth = cw * 0.8;
   const weightValue = FONT_WEIGHTS[state.fontWeight] || '700';
@@ -368,20 +437,23 @@ export function drawComposite(canvas, state) {
   const autoFitMaxHeight = state.autoFitText !== false ? textAreaHeight : undefined;
   const fontFamily = state.fontFamily || '';
 
+  const showHeadline = vis.headline && state.editingLine !== 1;
+  const showSubheadline = vis.subheadline && state.editingLine !== 2;
+
   if (isTop) {
     const textY1 = padding * 0.6;
-    if (state.editingLine !== 1) {
+    if (showHeadline) {
       drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
-    if (state.textLine2 && state.editingLine !== 2) {
+    if (state.textLine2 && showSubheadline) {
       drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
   } else {
     const textY1 = frameY + frameH + padding * 0.5;
-    if (state.editingLine !== 1) {
+    if (showHeadline) {
       drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
-    if (state.textLine2 && state.editingLine !== 2) {
+    if (state.textLine2 && showSubheadline) {
       drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
   }

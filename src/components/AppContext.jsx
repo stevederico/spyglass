@@ -39,7 +39,7 @@ function restoreSelectedApp() {
  * Context provider that manages app list and selection state
  *
  * Fetches apps from `/asc/apps` on mount. Exposes `apps`, `selectedApp`,
- * `isLoadingApps`, `isConnected`, `setSelectedApp`, and `addApp` via context.
+ * `isLoadingApps`, `setSelectedApp`, and `addApp` via context.
  *
  * @component
  * @param {Object} props
@@ -61,8 +61,6 @@ export function AppProvider({ children }) {
   const [apps, setApps] = useState(getInitialApps);
   const [selectedApp, setSelectedAppState] = useState(restoreSelectedApp);
   const [isLoadingApps, setIsLoadingApps] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
-
   /** Fetch app list from App Store Connect, seed local apps from localStorage */
   useEffect(() => {
     async function fetchApps() {
@@ -76,12 +74,9 @@ export function AppProvider({ children }) {
             const localApps = prev.filter((a) => a.id?.startsWith('local-'));
             return [...ascApps, ...localApps];
           });
-          setIsConnected(true);
-        } else {
-          setIsConnected(false);
         }
       } catch {
-        setIsConnected(false);
+        // ASC connection failed — local apps still available
       } finally {
         setIsLoadingApps(false);
       }
@@ -118,7 +113,6 @@ export function AppProvider({ children }) {
     apps,
     selectedApp,
     isLoadingApps,
-    isConnected,
     setSelectedApp,
     addApp
   };
@@ -133,7 +127,7 @@ export function AppProvider({ children }) {
 /**
  * Hook to access app context values
  *
- * @returns {{ apps: Array, selectedApp: Object|null, isLoadingApps: boolean, isConnected: boolean, setSelectedApp: Function, addApp: Function }}
+ * @returns {{ apps: Array, selectedApp: Object|null, isLoadingApps: boolean, setSelectedApp: Function, addApp: Function }}
  * @throws {Error} If used outside of AppProvider
  */
 export function useApp() {

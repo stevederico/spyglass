@@ -217,7 +217,7 @@ export default function LandingView() {
     <div className="landing-root min-h-screen bg-[#09090b] text-white">
       <style>{`
         .landing-root {
-          --glow: 59 130 246;
+          --glow: 99 102 241;
           font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .landing-hero-gradient {
@@ -265,7 +265,7 @@ export default function LandingView() {
       {/* Nav */}
       <nav className="relative z-10 flex items-center justify-between px-6 py-5 md:px-12">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10" />
               <circle cx="12" cy="12" r="4" />
@@ -286,7 +286,7 @@ export default function LandingView() {
           </a>
           <a
             href="/signup"
-            className="rounded-md bg-blue-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-600"
+            className="rounded-md bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-indigo-600"
             aria-label="Get started with Spyglass"
           >
             Get Started
@@ -302,14 +302,14 @@ export default function LandingView() {
           <div className="flex flex-1 flex-col items-center gap-6 md:items-start">
             <div className={`landing-fade-in ${isVisible ? 'visible' : ''}`}>
               <div className="landing-pill mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1">
-                <div className="h-1.5 w-1.5 rounded-full bg-blue-400" aria-hidden="true" />
-                <span className="text-xs font-medium text-blue-300/80">Built for iOS developers</span>
+                <div className="h-1.5 w-1.5 rounded-full bg-indigo-400" aria-hidden="true" />
+                <span className="text-xs font-medium text-indigo-300/80">Built for iOS developers</span>
               </div>
             </div>
             <h1 className={`landing-fade-in landing-stagger-1 ${isVisible ? 'visible' : ''} text-center text-4xl font-bold leading-tight tracking-tight md:text-left md:text-5xl lg:text-6xl`}>
               Deploy to the<br />
               App Store<br />
-              <span className="bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">in one click</span>.
+              <span className="bg-gradient-to-r from-indigo-400 to-indigo-600 bg-clip-text text-transparent">in one click</span>.
             </h1>
             <p className={`landing-fade-in landing-stagger-2 ${isVisible ? 'visible' : ''} max-w-md text-center text-base leading-relaxed text-white/50 md:text-left md:text-lg`}>
               Compose, translate, and batch export App Store screenshots across every device and locale. Manage metadata with AI. Ship faster.
@@ -317,7 +317,7 @@ export default function LandingView() {
             <div className={`landing-fade-in landing-stagger-3 ${isVisible ? 'visible' : ''} flex items-center gap-3`}>
               <a
                 href="/signup"
-                className="rounded-lg bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-600 hover:shadow-blue-500/30"
+                className="rounded-lg bg-indigo-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-all hover:bg-indigo-600 hover:shadow-indigo-500/30"
                 aria-label="Start using Spyglass for free"
               >
                 Start Free
@@ -381,7 +381,7 @@ export default function LandingView() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => (
               <div key={i} className="landing-card rounded-xl p-6">
-                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+                <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
                   {f.icon}
                 </div>
                 <h3 className="mb-1.5 text-sm font-semibold">{f.title}</h3>
@@ -407,7 +407,7 @@ export default function LandingView() {
               { step: '03', title: 'Export', desc: 'Batch render every device size and locale combination. Download as a zip or push to ASC.' }
             ].map((s, i) => (
               <div key={i} className="flex flex-1 flex-col gap-3">
-                <span className="font-mono text-xs text-blue-400/60">{s.step}</span>
+                <span className="font-mono text-xs text-indigo-400/60">{s.step}</span>
                 <h3 className="text-lg font-semibold">{s.title}</h3>
                 <p className="text-sm leading-relaxed text-white/40">{s.desc}</p>
               </div>
@@ -429,7 +429,7 @@ export default function LandingView() {
             <div className="mt-8 flex items-center justify-center gap-3">
               <a
                 href="/signup"
-                className="rounded-lg bg-blue-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-600"
+                className="rounded-lg bg-indigo-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-all hover:bg-indigo-600"
                 aria-label="Get started with Spyglass"
               >
                 Get Started
@@ -443,7 +443,7 @@ export default function LandingView() {
       <footer className="border-t border-white/5 px-6 py-8 md:px-12" aria-label="Footer">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-500/10 text-blue-400">
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-indigo-500/10 text-indigo-400">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" />
                 <circle cx="12" cy="12" r="4" />

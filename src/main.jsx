@@ -37,6 +37,10 @@ const appRoutes = [
  * @param {string} config.defaultRoute - Initial route path
  * @param {Object} config.overrides - Component overrides for built-in views
  */
+if (!localStorage.getItem('theme')) {
+  localStorage.setItem('theme', 'dark');
+}
+
 createSkateboardApp({
   constants,
   appRoutes,

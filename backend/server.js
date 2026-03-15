@@ -19,7 +19,7 @@ import exportsApp from './exports.js';
 import { databaseManager } from "./adapters/manager.js";
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFile, mkdir, stat, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { readFile, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { promisify } from 'node:util';
 
 // ==== SERVER CONFIG ====

@@ -145,11 +145,15 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
       for (const deviceKey of deviceArray) {
         setProgressLabel(`${locale} / ${DEVICES[deviceKey].label}`);
 
+        // Only apply frame PNG when device tier matches the frame model
+        const useFrame = baseState.frameModelInfo && baseState.frameModelInfo.ascTier === deviceKey;
         const state = {
           ...baseState,
           device: deviceKey,
           textLine1: t.line1 || baseState.textLine1,
-          textLine2: t.line2 || baseState.textLine2
+          textLine2: t.line2 || baseState.textLine2,
+          frameImage: useFrame ? baseState.frameImage : null,
+          frameModelInfo: useFrame ? baseState.frameModelInfo : null
         };
 
         const bytes = await renderToBytes(state);

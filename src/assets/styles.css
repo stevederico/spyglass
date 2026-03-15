@@ -3,7 +3,7 @@
 @source '../../node_modules/@stevederico/skateboard-ui';
 
 @theme {
-  --color-app: var(--color-blue-500);
+  --color-app: var(--color-indigo-500);
 }
 
 /* ── Sidebar ── */
@@ -20,69 +20,25 @@
   text-overflow: unset !important;
 }
 
-/* ── Force dark mode ── */
+/* ── Indigo accent (both modes) ── */
 :root {
-  color-scheme: dark;
-}
-
-html {
-  color-scheme: dark !important;
-}
-
-html:not(.dark) {
-  --background: 0 0% 4%;
-  --foreground: 0 0% 95%;
-  --card: 0 0% 4%;
-  --card-foreground: 0 0% 95%;
-  --popover: 0 0% 6%;
-  --popover-foreground: 0 0% 95%;
-  --primary: 217 91% 60%;
+  --primary: 239 84% 67%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 0 0% 10%;
-  --secondary-foreground: 0 0% 95%;
-  --muted: 0 0% 9%;
-  --muted-foreground: 0 0% 55%;
-  --accent: 0 0% 10%;
-  --accent-foreground: 0 0% 95%;
-  --destructive: 0 62% 50%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 12%;
-  --input: 0 0% 12%;
-  --ring: 217 91% 60%;
-  --sidebar-background: 0 0% 6%;
-  --sidebar-foreground: 0 0% 80%;
-  --sidebar-primary: 217 91% 60%;
+  --ring: 239 84% 67%;
+  --sidebar-primary: 239 84% 67%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 0 0% 10%;
-  --sidebar-accent-foreground: 0 0% 95%;
-  --sidebar-border: 0 0% 10%;
-  --sidebar-ring: 217 91% 60%;
-  background-color: hsl(0 0% 4%) !important;
-  color: hsl(0 0% 95%) !important;
-}
-
-body {
-  background-color: hsl(0 0% 5%) !important;
-}
-
-/* Force sidebar dark */
-[data-slot="sidebar"],
-[data-slot="sidebar-wrapper"],
-[data-slot="sidebar-inner"] {
-  background-color: hsl(0 0% 6%) !important;
-  color: hsl(0 0% 80%) !important;
-  border-color: hsl(0 0% 10%) !important;
-}
-
-[data-slot="sidebar-inset"] {
-  background-color: hsl(0 0% 4%) !important;
 }
 
 .dark {
-  --card: 0 0% 4%;
-  --accent: 0 0% 7%;
-  --muted: 0 0% 9%;
-  --border: 0 0% 12%;
+  --card: 0 0% 5%;
+  --accent: 0 0% 8%;
+  --muted: 0 0% 10%;
+  --border: 0 0% 14%;
+  --sidebar-background: 0 0% 5%;
+  --sidebar-foreground: 0 0% 80%;
+  --sidebar-accent: 0 0% 10%;
+  --sidebar-accent-foreground: 0 0% 95%;
+  --sidebar-border: 0 0% 14%;
 }
 
 /* ── Tool-style compact controls ── */
@@ -135,7 +91,7 @@ body {
 
 /* ── Header bar refinements ── */
 [data-slot="header"] {
-  border-bottom: 1px solid hsl(var(--border)) !important;
+  border-bottom: 1px solid hsl(var(--border));
   min-height: 2.75rem !important;
   height: 2.75rem !important;
 }
@@ -145,9 +101,15 @@ body {
   padding-bottom: 0 !important;
 }
 
+/* ── Button borders ── */
+button,
+[role="button"] {
+  border: 1px solid hsl(var(--border));
+}
+
 /* ── Main content area dark bg ── */
 main {
-  background: hsl(var(--background)) !important;
+  background: hsl(var(--background));
 }
 
 /* ── Scrollbar styling ── */

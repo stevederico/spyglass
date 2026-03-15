@@ -25,7 +25,10 @@ import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
 import { Spinner } from '@stevederico/skateboard-ui/shadcn/ui/spinner';
 import { toast } from 'sonner';
+import { Eye, EyeOff } from 'lucide-react';
 import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG, renderForLocale } from './composerHelpers.js';
+import { FRAME_MODELS } from './frameManifest.js';
+import { loadFrame, preloadFrame } from './frameLoader.js';
 import { useApp } from './AppContext.jsx';
 import AppPicker from './AppPicker.jsx';
 import TemplatePanel from './TemplatePanel.jsx';
@@ -138,9 +141,15 @@ export default function ScreenshotsView() {
   const [selectedFont, setSelectedFont] = useState('');
 
   // Device state
-  const [device, setDevice] = useState('iphone-67');
+  const [device, setDevice] = useState('iphone-65');
   const [showBezel, setShowBezel] = useState(true);
   const [screenshotImage, setScreenshotImage] = useState(null);
+
+  // Device frame PNG state
+  const [frameModel, setFrameModel] = useState('iphone-17-pro');
+  const [frameColor, setFrameColor] = useState('silver');
+  const [frameImage, setFrameImage] = useState(null);
+  const [frameLayout, setFrameLayout] = useState('full');
 
   // Localization state
   const [translations, setTranslations] = useState({});
@@ -148,6 +157,20 @@ export default function ScreenshotsView() {
   const [translationProgress, setTranslationProgress] = useState(0);
   const [showTranslations, setShowTranslations] = useState(false);
   const [previewLocale, setPreviewLocale] = useState('original');
+
+  // Layer visibility
+  const [layers, setLayers] = useState({
+    background: true, device: true, headline: true, subheadline: true
+  });
+
+  /**
+   * Toggle visibility of a named layer
+   *
+   * @param {string} name - Layer key to toggle
+   */
+  function toggleLayer(name) {
+    setLayers((prev) => ({ ...prev, [name]: !prev[name] }));
+  }
 
   // QoL state
   const [showPreviewAll, setShowPreviewAll] = useState(false);
@@ -162,7 +185,8 @@ const [panelOpen, setPanelOpen] = useState(true);
     bgColor: '#1a1a2e', isGradient: false, gradientStart: '#1a1a2e', gradientEnd: '#16213e',
     gradientDirection: 'top-bottom', textLine1: 'Track Your Fitness', textLine2: 'Reach Your Goals',
     textPosition: 'top', fontSize: 100, textColor: '#ffffff', textShadow: true, fontWeight: 'Bold',
-    autoFitText: true, device: 'iphone-67', showBezel: true, selectedFont: ''
+    autoFitText: true, device: 'iphone-65', showBezel: true, selectedFont: '',
+    frameModel: 'iphone-17-pro', frameColor: 'silver', frameLayout: 'full'
   });
 
   const currentDevice = DEVICES[device];
@@ -175,14 +199,14 @@ const [panelOpen, setPanelOpen] = useState(true);
       pushState({
         bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
         textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
-        autoFitText, device, showBezel, selectedFont
+        autoFitText, device, showBezel, selectedFont, frameModel, frameColor, frameLayout
       });
     }, HISTORY_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [
     bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
     textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
-    autoFitText, device, showBezel, selectedFont, pushState
+    autoFitText, device, showBezel, selectedFont, frameModel, frameColor, frameLayout, pushState
   ]);
 
   // Restore state from history on undo/redo
@@ -205,6 +229,9 @@ const [panelOpen, setPanelOpen] = useState(true);
     setDevice(historyState.device);
     setShowBezel(historyState.showBezel);
     setSelectedFont(historyState.selectedFont || '');
+    setFrameModel(historyState.frameModel || '');
+    setFrameColor(historyState.frameColor || '');
+    setFrameLayout(historyState.frameLayout || 'full');
     // Allow next tick before re-enabling history push
     requestAnimationFrame(() => { isRestoringRef.current = false; });
   }, [historyState]);
@@ -596,7 +623,9 @@ const [panelOpen, setPanelOpen] = useState(true);
       device, showBezel, screenshotImage,
       textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
       bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-      autoFitText, fontFamily: selectedFont
+      autoFitText, fontFamily: selectedFont,
+      frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
+      frameLayout
     };
 
     for (const locale of LOCALES) {
@@ -616,7 +645,31 @@ const [panelOpen, setPanelOpen] = useState(true);
       URL.revokeObjectURL(url);
     }
     toast.success('Translated screenshots exported');
-  }, [translations, hasTranslations, device, showBezel, screenshotImage, textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight, bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage, autoFitText, selectedFont]);
+  }, [translations, hasTranslations, device, showBezel, screenshotImage, textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight, bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage, autoFitText, selectedFont, frameImage, frameModel, frameLayout]);
+
+  // Load frame PNG when model or color changes
+  useEffect(() => {
+    if (!frameModel || !frameColor) {
+      setFrameImage(null);
+      return;
+    }
+    loadFrame(frameModel, frameColor, 'portrait')
+      .then(setFrameImage)
+      .catch(() => {
+        toast.error('Failed to load device frame');
+        setFrameImage(null);
+      });
+  }, [frameModel, frameColor]);
+
+  // Auto-set ASC tier and default color when frame model changes
+  useEffect(() => {
+    if (frameModel && FRAME_MODELS[frameModel]) {
+      const model = FRAME_MODELS[frameModel];
+      setDevice(model.ascTier);
+      setFrameColor(model.defaultColor);
+      setShowBezel(true);
+    }
+  }, [frameModel]);
 
   // Redraw canvas whenever any setting changes
   useEffect(() => {
@@ -630,13 +683,16 @@ const [panelOpen, setPanelOpen] = useState(true);
       device, showBezel, screenshotImage,
       textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
       bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-      autoFitText, fontFamily: selectedFont, editingLine
+      autoFitText, fontFamily: selectedFont, editingLine, layers,
+      frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
+      frameLayout
     });
   }, [
     device, showBezel, screenshotImage,
     textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
     bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-    autoFitText, selectedFont, previewLocale, translations, editingLine
+    autoFitText, selectedFont, previewLocale, translations, editingLine, layers,
+    frameImage, frameModel, frameLayout
   ]);
 
 
@@ -663,7 +719,12 @@ const [panelOpen, setPanelOpen] = useState(true);
       ) : (
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Canvas Preview */}
-        <section className="flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 md:p-6" aria-label="Screenshot preview">
+        <section
+          className="flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 md:p-6"
+          aria-label="Screenshot preview"
+          onDrop={handleDrop}
+          onDragOver={(e) => e.preventDefault()}
+        >
             <div
               ref={canvasContainerRef}
               className={`relative w-full cursor-text transition-all duration-300 ease-in-out ${panelOpen ? 'max-w-lg' : 'max-w-xl'}`}
@@ -763,8 +824,8 @@ const [panelOpen, setPanelOpen] = useState(true);
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Color</span>
                       <div className="flex items-center gap-1.5">
-                        <input type="color" id="bg-color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="h-6 w-6 cursor-pointer rounded border border-border/60 p-0" aria-label="Background color" />
                         <span className="font-mono text-[11px] text-muted-foreground/70">{bgColor}</span>
+                        <input type="color" id="bg-color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="h-6 w-6 cursor-pointer rounded border border-border/60 p-0" aria-label="Background color" />
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
@@ -776,15 +837,15 @@ const [panelOpen, setPanelOpen] = useState(true);
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">Start</span>
                           <div className="flex items-center gap-1.5">
-                            <input type="color" id="grad-start" value={gradientStart} onChange={(e) => setGradientStart(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient start color" />
                             <span className="font-mono text-[11px] text-muted-foreground/70">{gradientStart}</span>
+                            <input type="color" id="grad-start" value={gradientStart} onChange={(e) => setGradientStart(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient start color" />
                           </div>
                         </div>
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-muted-foreground">End</span>
                           <div className="flex items-center gap-1.5">
-                            <input type="color" id="grad-end" value={gradientEnd} onChange={(e) => setGradientEnd(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient end color" />
                             <span className="font-mono text-[11px] text-muted-foreground/70">{gradientEnd}</span>
+                            <input type="color" id="grad-end" value={gradientEnd} onChange={(e) => setGradientEnd(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient end color" />
                           </div>
                         </div>
                         <div className="flex items-center justify-between">
@@ -880,8 +941,8 @@ const [panelOpen, setPanelOpen] = useState(true);
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Color</span>
                   <div className="flex items-center gap-1.5">
-                    <input type="color" id="text-color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Text color" />
                     <span className="font-mono text-[11px] text-muted-foreground/70">{textColor}</span>
+                    <input type="color" id="text-color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Text color" />
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
@@ -914,17 +975,72 @@ const [panelOpen, setPanelOpen] = useState(true);
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Device</h3>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Frame</span>
-                  <Switch id="bezel-toggle" checked={showBezel} onCheckedChange={setShowBezel} aria-label="Toggle device frame bezel" className="scale-75" />
+                  <span className="text-xs text-muted-foreground">Model</span>
+                  <Select value={frameModel} onValueChange={(val) => setFrameModel(val === 'none' ? '' : val)}>
+                    <SelectTrigger className="h-7 w-40 border-0 bg-transparent text-xs shadow-none" aria-label="Select device frame model">
+                      <SelectValue>{frameModel && FRAME_MODELS[frameModel] ? FRAME_MODELS[frameModel].label : 'No frame'}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No frame</SelectItem>
+                      {['iPhone', 'iPad'].map((group) => (
+                        <div key={group}>
+                          <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground">{group}</div>
+                          {Object.entries(FRAME_MODELS)
+                            .filter(([, m]) => m.group === group)
+                            .map(([key, m]) => (
+                              <SelectItem key={key} value={key}>{m.label}</SelectItem>
+                            ))}
+                        </div>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
+                {frameModel && FRAME_MODELS[frameModel] && (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-xs text-muted-foreground">Color</span>
+                    <div className="flex flex-wrap gap-1">
+                      {FRAME_MODELS[frameModel].colors.map((c) => (
+                        <button
+                          key={c.slug}
+                          onClick={() => setFrameColor(c.slug)}
+                          className={`rounded px-2 py-0.5 text-[10px] transition-colors ${frameColor === c.slug ? 'bg-primary text-primary-foreground' : 'bg-accent/50 text-muted-foreground hover:bg-accent'}`}
+                          aria-label={`Select ${c.label} frame color`}
+                          aria-pressed={frameColor === c.slug}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Layout</span>
+                  <div className="flex rounded-md border border-border/50 p-0.5" role="tablist" aria-label="Device layout">
+                    {[{ id: 'full', label: 'Normal' }, { id: 'zoomed', label: 'Zoomed' }, { id: 'fullscreen', label: 'Full' }].map((opt) => (
+                      <button
+                        key={opt.id}
+                        role="tab"
+                        aria-selected={frameLayout === opt.id}
+                        onClick={() => setFrameLayout(opt.id)}
+                        className={`flex-1 rounded px-2 py-1 text-xs transition-colors ${frameLayout === opt.id ? 'bg-accent text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {!frameModel && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Frame</span>
+                    <Switch id="bezel-toggle" checked={showBezel} onCheckedChange={setShowBezel} aria-label="Toggle device frame bezel" className="scale-75" />
+                  </div>
+                )}
                 <div
-                  className="flex min-h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed border-border/60 bg-accent/10 p-2 transition-colors hover:bg-accent/30"
+                  className="flex min-h-10 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed border-border/60 bg-accent/10 p-2 transition-colors hover:bg-accent/30"
                   onClick={() => document.getElementById('screenshot-upload').click()}
-                  onDrop={handleDrop}
-                  onDragOver={(e) => e.preventDefault()}
                   role="button"
                   tabIndex={0}
-                  aria-label="Upload screenshot — click or drag and drop"
+                  aria-label="Upload screenshot — click to browse or drop anywhere on canvas"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -935,10 +1051,7 @@ const [panelOpen, setPanelOpen] = useState(true);
                   {screenshotImage ? (
                     <p className="text-xs text-foreground">Screenshot loaded — click to replace</p>
                   ) : (
-                    <>
-                      <p className="text-xs font-medium text-muted-foreground">Drop screenshot here</p>
-                      <p className="text-xs text-muted-foreground/60">or click to browse</p>
-                    </>
+                    <p className="text-xs font-medium text-muted-foreground">Browse or drop on canvas</p>
                   )}
                 </div>
                 <input type="file" id="screenshot-upload" accept="image/*" onChange={handleScreenshotUpload} className="hidden" aria-label="Screenshot file input" />
@@ -1027,6 +1140,34 @@ const [panelOpen, setPanelOpen] = useState(true);
               </div>
             </div>
 
+            {/* ── LAYERS ── */}
+            <div className="border-b border-border/40 px-3 py-2.5">
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Layers</h3>
+              <div className="flex flex-col gap-0.5">
+                {[
+                  { key: 'headline', label: 'Headline' },
+                  { key: 'subheadline', label: 'Subheadline' },
+                  { key: 'device', label: 'Device' },
+                  { key: 'background', label: 'Background' },
+                ].map((layer) => (
+                  <button
+                    key={layer.key}
+                    onClick={() => toggleLayer(layer.key)}
+                    className={`flex items-center gap-2 rounded px-1.5 py-1 text-left transition-colors hover:bg-accent/30 ${layers[layer.key] ? '' : 'opacity-40'}`}
+                    aria-label={`${layers[layer.key] ? 'Hide' : 'Show'} ${layer.label} layer`}
+                    aria-pressed={layers[layer.key]}
+                  >
+                    {layers[layer.key] ? (
+                      <Eye className="h-3.5 w-3.5 text-foreground" aria-hidden="true" />
+                    ) : (
+                      <EyeOff className="h-3.5 w-3.5 text-muted-foreground/30" aria-hidden="true" />
+                    )}
+                    <span className="text-xs">{layer.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* ── EXPORT ── */}
             <div className="px-3 py-2.5">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Export</h3>
@@ -1067,11 +1208,16 @@ const [panelOpen, setPanelOpen] = useState(true);
                       if (!el || !showPreviewAll) return;
                       const previewLine1 = previewLocale !== 'original' && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
                       const previewLine2 = previewLocale !== 'original' && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
+                      const frameInfo = frameModel ? FRAME_MODELS[frameModel] : null;
+                      const useFrame = frameInfo && frameInfo.ascTier === d.key;
                       drawComposite(el, {
                         device: d.key, showBezel, screenshotImage,
                         textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
                         bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-                        autoFitText, fontFamily: selectedFont
+                        autoFitText, fontFamily: selectedFont,
+                        frameImage: useFrame ? frameImage : null,
+                        frameModelInfo: useFrame ? frameInfo : null,
+                        frameLayout
                       });
                     }}
                     style={{ width: '100%', height: 'auto', borderRadius: '4px' }}
@@ -1097,7 +1243,9 @@ const [panelOpen, setPanelOpen] = useState(true);
           device, showBezel, screenshotImage,
           textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
           bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-          autoFitText, fontFamily: selectedFont
+          autoFitText, fontFamily: selectedFont,
+          frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
+          frameLayout
         }}
         translations={translations}
         appName={selectedApp?.name}

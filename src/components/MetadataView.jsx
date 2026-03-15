@@ -8,7 +8,7 @@
  * @component
  * @returns {JSX.Element} Metadata management interface
  */
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import Header from '@stevederico/skateboard-ui/Header';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
@@ -74,30 +74,8 @@ const LOCALES = [
   { code: 'vi-VI', name: 'Vietnamese' }
 ];
 
-/**
- * Keyword character limits by locale
- *
- * Most locales have 100 chars, but some vary.
- *
- * @type {Object.<string, number>}
- */
-const KEYWORD_LIMITS = {
-  'ja-JP': 100,
-  'ko-KR': 100,
-  'cmn-Hans': 100,
-  'cmn-Hant': 100,
-  default: 100
-};
-
-/**
- * Get the keyword character limit for a given locale
- *
- * @param {string} locale - Locale code
- * @returns {number} Maximum keyword characters
- */
-function getKeywordLimit(locale) {
-  return KEYWORD_LIMITS[locale] || KEYWORD_LIMITS.default;
-}
+/** Maximum keyword characters for App Store Connect (all locales) */
+const KEYWORD_LIMIT = 100;
 
 /**
  * Character count indicator with color feedback
@@ -162,6 +140,9 @@ export default function MetadataView() {
   const [localizationIds, setLocalizationIds] = useState({});
   const [isLoadingMeta, setIsLoadingMeta] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Panel state
+  const [panelOpen, setPanelOpen] = useState(true);
 
   // AI generation state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -351,16 +332,16 @@ export default function MetadataView() {
           tone
         })
       });
-      if (result?.data) {
+      if (result) {
         setLocalizedMetadata((prev) => ({
           ...prev,
           [selectedLocale]: {
             ...(prev[selectedLocale] || EMPTY_METADATA),
-            name: result.data.name || metadata.name,
-            subtitle: result.data.subtitle || metadata.subtitle,
-            description: result.data.description || metadata.description,
-            keywords: result.data.keywords || metadata.keywords,
-            whatsNew: result.data.whatsNew || metadata.whatsNew
+            name: result.name || metadata.name,
+            subtitle: result.subtitle || metadata.subtitle,
+            description: result.description || metadata.description,
+            keywords: result.keywords || metadata.keywords,
+            whatsNew: result.whatsNew || metadata.whatsNew
           }
         }));
         toast.success('Metadata generated successfully');
@@ -399,8 +380,8 @@ export default function MetadataView() {
         method: 'POST',
         body: JSON.stringify(bodies[field])
       });
-      if (result?.data?.[field]) {
-        handleFieldChange(field, result.data[field]);
+      if (result?.[field]) {
+        handleFieldChange(field, result[field]);
         toast.success(`${field === 'whatsNew' ? "What's New" : field.charAt(0).toUpperCase() + field.slice(1)} generated`);
       }
     } catch {
@@ -431,8 +412,8 @@ export default function MetadataView() {
           appName: metadata.name || selectedApp?.name || ''
         })
       });
-      if (result?.data?.text) {
-        handleFieldChange(field, result.data.text);
+      if (result?.improved) {
+        handleFieldChange(field, result.improved);
         toast.success('Text improved');
       }
     } catch {
@@ -541,7 +522,7 @@ export default function MetadataView() {
    */
   function handleAddSuggestion(keyword) {
     const current = metadata.keywords;
-    const limit = getKeywordLimit(selectedLocale);
+    const limit = KEYWORD_LIMIT;
     const separator = current ? ',' : '';
     const newKeywords = `${current}${separator}${keyword}`;
     if (newKeywords.length <= limit) {
@@ -607,7 +588,7 @@ export default function MetadataView() {
   ];
 
   const original = originalMetadata[selectedLocale] || EMPTY_METADATA;
-  const keywordLimit = getKeywordLimit(selectedLocale);
+  const keywordLimit = KEYWORD_LIMIT;
 
   return (
     <>
@@ -643,6 +624,15 @@ export default function MetadataView() {
             >
               History
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setPanelOpen((v) => !v)}
+              aria-label={panelOpen ? 'Hide tools panel' : 'Show tools panel'}
+              aria-expanded={panelOpen}
+            >
+              {panelOpen ? 'Hide Tools' : 'Show Tools'}
+            </Button>
           </>
         )}
       </Header>
@@ -651,71 +641,10 @@ export default function MetadataView() {
           <p className="text-muted-foreground">Select an app to get started</p>
         </div>
       ) : (
-      <div className="flex flex-1 flex-col">
-        <div className="flex flex-col gap-6 p-4 md:p-6">
-
-          {/* AI Generation Card */}
-          <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Generate with AI</CardTitle>
-              <CardDescription>
-                Provide context to generate optimized App Store metadata using Grok
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="ai-key-features">Key Features</Label>
-                  <Input
-                    id="ai-key-features"
-                    value={keyFeatures}
-                    onChange={(e) => setKeyFeatures(e.target.value)}
-                    placeholder="workout tracking, meal logging, progress photos"
-                    aria-label="Key features for AI generation"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="ai-target-audience">Target Audience</Label>
-                  <Input
-                    id="ai-target-audience"
-                    value={targetAudience}
-                    onChange={(e) => setTargetAudience(e.target.value)}
-                    placeholder="fitness enthusiasts"
-                    aria-label="Target audience for AI generation"
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="ai-tone">Tone</Label>
-                  <Select value={tone} onValueChange={setTone}>
-                    <SelectTrigger id="ai-tone" aria-label="Select tone for AI generation">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TONE_OPTIONS.map((t) => (
-                        <SelectItem key={t} value={t}>{t}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button
-                  onClick={handleGenerateAll}
-                  disabled={isGenerating}
-                  aria-label="Generate all metadata fields with AI"
-                >
-                  {isGenerating ? (
-                    <span className="flex items-center gap-2">
-                      <Spinner className="h-4 w-4" />
-                      Generating...
-                    </span>
-                  ) : (
-                    'Generate All Metadata'
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Main content */}
+        <div className="flex flex-1 flex-col overflow-y-auto">
+          <div className="flex flex-col gap-6 p-4 md:p-6">
 
           {/* Translation Progress */}
           {isTranslating && (
@@ -1017,7 +946,138 @@ export default function MetadataView() {
             </Card>
           )}
 
+          </div>
         </div>
+
+        {/* Right: Tools Panel */}
+        <aside
+          className={`sticky top-0 h-[calc(100vh-var(--header-height)-1px)] flex-col border-l border-border/50 bg-background overflow-y-auto transition-all duration-300 ease-in-out ${panelOpen ? 'flex w-72 min-w-72 opacity-100' : 'hidden w-0 min-w-0 opacity-0 pointer-events-none'}`}
+          aria-label="Metadata tools"
+          aria-hidden={!panelOpen}
+        >
+          {/* ── AI GENERATE ── */}
+          <div className="border-b border-border/40 px-3 py-2.5">
+            <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">AI Generate</h3>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Key Features</span>
+                <Input
+                  id="ai-key-features"
+                  value={keyFeatures}
+                  onChange={(e) => setKeyFeatures(e.target.value)}
+                  placeholder="tracking, logging, photos..."
+                  aria-label="Key features for AI generation"
+                  className="h-7 text-xs"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-muted-foreground">Target Audience</span>
+                <Input
+                  id="ai-target-audience"
+                  value={targetAudience}
+                  onChange={(e) => setTargetAudience(e.target.value)}
+                  placeholder="fitness enthusiasts"
+                  aria-label="Target audience for AI generation"
+                  className="h-7 text-xs"
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Tone</span>
+                <Select value={tone} onValueChange={setTone}>
+                  <SelectTrigger id="ai-tone" className="h-7 w-28 border-0 bg-transparent text-xs shadow-none" aria-label="Select tone for AI generation">
+                    <SelectValue>{tone}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TONE_OPTIONS.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={handleGenerateAll}
+                disabled={isGenerating}
+                aria-label="Generate all metadata fields with AI"
+              >
+                {isGenerating ? (
+                  <span className="flex items-center gap-2">
+                    <Spinner className="h-3 w-3" />
+                    Generating...
+                  </span>
+                ) : (
+                  'Generate All Metadata'
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* ── TRANSLATE ── */}
+          <div className="border-b border-border/40 px-3 py-2.5">
+            <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Translate</h3>
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-muted-foreground/50">Use per-field "Translate All" buttons to translate individual fields across all locales</p>
+              {isTranslating && (
+                <div className="flex flex-col gap-1" role="status" aria-live="polite">
+                  <Progress value={translationProgress} aria-label="Translation progress" className="h-1.5" />
+                  <p className="text-xs text-muted-foreground">{translationProgress}%</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── LOCALE ── */}
+          <div className="border-b border-border/40 px-3 py-2.5">
+            <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Locale</h3>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">Current</span>
+                <span className="text-xs font-medium">{LOCALES.find((l) => l.code === selectedLocale)?.name}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-muted-foreground">Populated</span>
+                <div className="flex flex-wrap gap-1 pt-0.5">
+                  {LOCALES.filter((l) => localizedMetadata[l.code]).map((l) => (
+                    <button
+                      key={l.code}
+                      onClick={() => setSelectedLocale(l.code)}
+                      className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${selectedLocale === l.code ? 'bg-primary text-primary-foreground' : 'bg-accent/40 text-muted-foreground hover:bg-accent'}`}
+                      aria-label={`Switch to ${l.name}`}
+                    >
+                      {l.code.split('-')[0]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── ACTIONS ── */}
+          <div className="px-3 py-2.5">
+            <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Actions</h3>
+            <div className="flex flex-col gap-1.5">
+              <Button
+                size="sm"
+                className="h-7 text-xs"
+                onClick={handleInitiateSave}
+                disabled={isSaving || !selectedApp?.id}
+                aria-label="Save metadata changes"
+              >
+                {isSaving ? 'Saving...' : 'Save to ASC'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => { handleFetchHistory(); setShowHistory(true); }}
+                aria-label="View version history"
+              >
+                Version History
+              </Button>
+            </div>
+          </div>
+        </aside>
       </div>
       )}
 

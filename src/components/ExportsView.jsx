@@ -178,7 +178,7 @@ export default function ExportsView() {
 
       {!selectedApp ? (
         <div className="flex flex-1 items-center justify-center">
-          <p className="text-xs text-muted-foreground/50">Select an app to get started</p>
+          <p className="text-sm text-muted-foreground">Select an app to get started</p>
         </div>
       ) : isLoading ? (
         <div className="flex flex-1 items-center justify-center">
@@ -186,13 +186,13 @@ export default function ExportsView() {
         </div>
       ) : packages.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted-foreground/20" aria-hidden="true">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted-foreground/50" aria-hidden="true">
             <rect x="2" y="3" width="20" height="18" rx="2" />
             <path d="M2 9h20" />
             <path d="M10 3v6" />
           </svg>
-          <p className="text-sm text-muted-foreground/60">No exports yet</p>
-          <p className="text-[11px] text-muted-foreground/30">Create one from Screenshots using Batch Export</p>
+          <p className="text-sm text-muted-foreground">No exports yet</p>
+          <p className="text-xs text-muted-foreground/60">Create one from Screenshots using Batch Export</p>
         </div>
       ) : (
         <div className="flex flex-col gap-px p-3">
@@ -272,7 +272,7 @@ export default function ExportsView() {
                                 className="w-full rounded border border-border/30 object-contain"
                                 loading="lazy"
                               />
-                              <span className="absolute bottom-0 left-0 right-0 truncate rounded-b bg-black/60 px-1 py-0.5 text-center text-[8px] text-white/70 opacity-0 transition-opacity group-hover:opacity-100">
+                              <span className="absolute bottom-0 left-0 right-0 truncate rounded-b bg-foreground/60 px-1 py-0.5 text-center text-[8px] text-background/70 opacity-0 transition-opacity group-hover:opacity-100">
                                 {file.locale}
                               </span>
                             </div>

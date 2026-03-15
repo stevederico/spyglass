@@ -2,6 +2,26 @@
 
 ## To-Do
 
+0.7.0
+
+  Fix light mode support
+  Remove forced dark overrides
+  Add theme-aware button borders
+  Add localStorage theme seeding
+  Add device frame system
+  Add frame manifest registry
+  Add frame lazy loader
+  Add layer visibility toggles
+  Add frame model selector
+  Add frame color picker
+  Add frame layout modes
+  Refactor TemplatePanel compact
+  Update ExportsView theme-aware
+  Remove unused isConnected state
+  Update composerHelpers frame support
+  Update default device iphone-65
+  Update constants version
+
 0.6.0
 
   Add custom landing page
