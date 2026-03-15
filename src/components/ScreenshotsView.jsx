@@ -28,7 +28,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@stevederico/s
 import { Spinner } from '@stevederico/skateboard-ui/shadcn/ui/spinner';
 import { toast } from 'sonner';
 import { Eye, EyeOff, ChevronDown } from 'lucide-react';
-import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG, renderForLocale } from './composerHelpers.js';
+import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG, renderForLocale, getDeviceFamily, detectFamilyFromImage, getDefaultDeviceForFamily } from './composerHelpers.js';
 import { FRAME_MODELS } from './frameManifest.js';
 import { loadFrame, preloadFrame } from './frameLoader.js';
 import { useApp } from './AppContext.jsx';
@@ -69,13 +69,42 @@ const loadedGoogleFonts = new Set();
  *
  * @param {string} fontName - Google Font family name
  */
+/**
+ * Load a Google Font by injecting a stylesheet link and waiting for the font to be ready.
+ * Waits for the link to load, then uses document.fonts.ready to ensure the font is usable.
+ *
+ * @param {string} fontName - Google Font family name
+ * @returns {Promise<void>}
+ */
+/**
+ * Load a Google Font by injecting a stylesheet and waiting for the font files.
+ * After link.onload, the @font-face is registered so document.fonts.load() works.
+ *
+ * @param {string} fontName - Google Font family name
+ * @returns {Promise<void>}
+ */
 function loadGoogleFont(fontName) {
-  if (!fontName || loadedGoogleFonts.has(fontName)) return;
+  if (!fontName) return Promise.resolve();
+  if (loadedGoogleFonts.has(fontName)) return Promise.resolve();
   loadedGoogleFonts.add(fontName);
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@300;400;700&display=swap`;
-  document.head.appendChild(link);
+
+  return new Promise((resolve) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@300;400;700&display=swap`;
+    link.onload = () => {
+      console.log(`[Font] CSS loaded for "${fontName}", waiting for font files...`);
+      document.fonts.load(`400 48px "${fontName}"`).then(() => {
+        console.log(`[Font] "${fontName}" ready`);
+        resolve();
+      }).catch(resolve);
+    };
+    link.onerror = () => {
+      console.warn(`[Font] Failed to load CSS for "${fontName}"`);
+      resolve();
+    };
+    document.head.appendChild(link);
+  });
 }
 
 /** All supported App Store Connect locales */
@@ -205,6 +234,13 @@ const [panelOpen, setPanelOpen] = useState(true);
   const currentDevice = DEVICES[device];
   const hasTranslations = Object.keys(translations).length > 0;
 
+  /** Filter device picker to match uploaded screenshot family */
+  const screenshotFamily = screenshotImage ? detectFamilyFromImage(screenshotImage) : null;
+  const filteredDeviceOptions = useMemo(() => {
+    if (!screenshotFamily) return DEVICE_OPTIONS;
+    return DEVICE_OPTIONS.filter((d) => getDeviceFamily(d.key) === screenshotFamily);
+  }, [screenshotFamily]);
+
   /** Max width for the canvas container — keeps landscape the same visual area as portrait, just rotated */
   const PORTRAIT_BASE_W = { open: 384, closed: 448 };
   const canvasMaxWidth = useMemo(() => {
@@ -216,10 +252,17 @@ const [panelOpen, setPanelOpen] = useState(true);
     return baseW;
   }, [currentDevice, orientation, panelOpen]);
 
-  // Load Google Font when selectedFont changes
+  // Ref to latest canvas draw function — called after async font loads
+  const redrawRef = useRef(null);
+
+  // Load Google Font stylesheet when selectedFont changes, redraw when ready
   useEffect(() => {
     if (selectedFont && GOOGLE_FONTS.includes(selectedFont)) {
-      loadGoogleFont(selectedFont);
+      console.log(`[Font] Selected: "${selectedFont}"`);
+      loadGoogleFont(selectedFont).then(() => {
+        console.log(`[Font] Redrawing canvas after "${selectedFont}" loaded`);
+        redrawRef.current?.();
+      });
     }
   }, [selectedFont]);
 
@@ -355,6 +398,22 @@ const [panelOpen, setPanelOpen] = useState(true);
   }
 
   /**
+   * Auto-switch device to match screenshot family (iPhone vs iPad).
+   * App Store Connect rejects mismatched screenshots.
+   *
+   * @param {HTMLImageElement} img - Loaded screenshot image
+   */
+  function autoSwitchDevice(img) {
+    const family = detectFamilyFromImage(img);
+    const currentFamily = getDeviceFamily(device);
+    if (family !== currentFamily) {
+      const newDevice = getDefaultDeviceForFamily(family);
+      setDevice(newDevice);
+      toast.info(`Switched to ${family === 'ipad' ? 'iPad' : 'iPhone'} — screenshot dimensions detected`);
+    }
+  }
+
+  /**
    * Handle screenshot upload
    *
    * @param {Event} e - File input change event
@@ -365,6 +424,7 @@ const [panelOpen, setPanelOpen] = useState(true);
     try {
       const img = await loadImage(file);
       setScreenshotImage(img);
+      autoSwitchDevice(img);
       toast.success('Screenshot loaded');
     } catch {
       toast.error('Failed to load screenshot');
@@ -385,6 +445,7 @@ const [panelOpen, setPanelOpen] = useState(true);
       if (files.length === 1) {
         const img = await loadImage(files[0]);
         setScreenshotImage(img);
+        autoSwitchDevice(img);
         toast.success('Screenshot loaded');
       } else {
         const images = await Promise.all(files.map(loadImage));
@@ -611,7 +672,6 @@ const [panelOpen, setPanelOpen] = useState(true);
     }
 
     const toTranslate = LOCALES.filter((l) => selectedLocales.has(l.code) && !ENGLISH_LOCALES.has(l.code));
-    let completed = 0;
 
     // Mark selected non-English locales as "translating"
     for (const locale of toTranslate) {
@@ -619,35 +679,43 @@ const [panelOpen, setPanelOpen] = useState(true);
     }
     setTranslations({ ...newTranslations });
 
-    for (const locale of toTranslate) {
-      try {
-        const response = await apiRequest('/translate/batch', {
-          method: 'POST',
-          body: JSON.stringify({
-            texts: [textLine1, textLine2],
-            source: 'en',
-            target: locale.code
-          })
-        });
+    // Single batch API call translates all locales at once
+    try {
+      const response = await apiRequest('/translate/batch', {
+        method: 'POST',
+        body: JSON.stringify({
+          texts: [textLine1, textLine2],
+          source: 'en'
+        })
+      });
 
-        if (response?.translations) {
-          newTranslations[locale.code] = {
-            line1: response.translations[0] ?? '',
-            line2: response.translations[1] ?? '',
-            status: 'translated'
-          };
-        } else {
+      if (response?.translations) {
+        for (const locale of toTranslate) {
+          const localeTranslation = response.translations[locale.code];
+          if (Array.isArray(localeTranslation)) {
+            newTranslations[locale.code] = {
+              line1: localeTranslation[0] ?? '',
+              line2: localeTranslation[1] ?? '',
+              status: 'translated'
+            };
+          } else if (localeTranslation?.error) {
+            newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
+          } else {
+            newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
+          }
+        }
+      } else {
+        for (const locale of toTranslate) {
           newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
         }
-      } catch {
+      }
+    } catch {
+      for (const locale of toTranslate) {
         newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
       }
-
-      completed++;
-      setTranslationProgress(Math.round((completed / toTranslate.length) * 100));
-      setTranslations({ ...newTranslations });
     }
 
+    setTranslations({ ...newTranslations });
     setIsTranslating(false);
     setTranslationProgress(100);
     toast.success(`Translated ${toTranslate.length} languages`);
@@ -787,7 +855,7 @@ const [panelOpen, setPanelOpen] = useState(true);
     }
   }
 
-  // Redraw canvas whenever any setting changes
+  // Redraw canvas whenever any setting changes or a font finishes loading
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -796,14 +864,20 @@ const [panelOpen, setPanelOpen] = useState(true);
     const previewLine1 = !isEnglishLocale && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
     const previewLine2 = !isEnglishLocale && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
 
-    drawComposite(canvas, {
-      device, showBezel, screenshotImage,
-      textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
-      bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-      autoFitText, fontFamily: selectedFont, editingLine, layers,
-      frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
-      frameLayout, orientation
-    });
+    const draw = () => {
+      console.log(`[Canvas] Drawing with font: "${selectedFont}"`);
+      drawComposite(canvas, {
+        device, showBezel, screenshotImage,
+        textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
+        bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
+        autoFitText, fontFamily: selectedFont, editingLine, layers,
+        frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
+        frameLayout, orientation
+      });
+    };
+
+    draw();
+    redrawRef.current = draw;
   }, [
     device, showBezel, screenshotImage,
     textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
@@ -845,7 +919,7 @@ const [panelOpen, setPanelOpen] = useState(true);
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {DEVICE_OPTIONS.map((d) => {
+            {filteredDeviceOptions.map((d) => {
               const info = DEVICES[d.key];
               const requiredLabel = d.key === 'iphone-69' ? ' ★' : d.key === 'ipad-13' ? ' ★ iPad' : '';
               return (
@@ -1348,27 +1422,17 @@ const [panelOpen, setPanelOpen] = useState(true);
             <div className="px-3 py-2.5">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Export</h3>
               <div className="flex flex-col gap-1.5">
+                <Button size="sm" className="h-7 text-xs" onClick={() => setShowBatchExport(true)} aria-label="Export screenshots for all devices and locales">
+                  Export
+                </Button>
                 <div className="flex items-center gap-1.5">
-                  <Button size="sm" className="h-7 flex-1 text-xs" onClick={handleExport} aria-label="Export composed screenshot as PNG">
-                    Export PNG
-                  </Button>
-                  {slots.length > 1 && (
-                    <Button size="sm" className="h-7 flex-1 text-xs" onClick={handleExportAll} aria-label={`Export all ${slots.length} screenshots as PNGs`}>
-                      Export All ({slots.length})
-                    </Button>
-                  )}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => setShowPreviewAll(true)} aria-label="Preview screenshot at all device sizes">
-                    Preview All
+                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={handleExport} aria-label="Download current screenshot as PNG">
+                    Download PNG
                   </Button>
                   <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => setShowPreviewLocales(true)} disabled={!hasTranslations} aria-label="Preview screenshot in all translated locales">
                     Preview Locales
                   </Button>
                 </div>
-                <Button variant="outline" size="sm" className="h-7 w-full text-xs" onClick={() => setShowBatchExport(true)} disabled={!hasTranslations} aria-label="Open batch export dialog">
-                  Batch Export
-                </Button>
                 <p className="text-center text-[10px] text-muted-foreground/50">
                   {currentDevice.width} &times; {currentDevice.height}px
                 </p>
@@ -1386,7 +1450,7 @@ const [panelOpen, setPanelOpen] = useState(true);
             <DialogTitle>Preview All Sizes</DialogTitle>
           </DialogHeader>
           <div className="flex-1 grid grid-cols-4 grid-rows-2 gap-4 min-h-0">
-            {DEVICE_OPTIONS.map((d) => {
+            {filteredDeviceOptions.map((d) => {
               const dev = DEVICES[d.key];
               return (
                 <div key={d.key} className="flex flex-col items-center gap-1 min-h-0 overflow-hidden">
@@ -1440,43 +1504,57 @@ const [panelOpen, setPanelOpen] = useState(true);
           <DialogHeader className="shrink-0">
             <DialogTitle>Preview All Locales</DialogTitle>
           </DialogHeader>
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto">
             <div className="grid grid-cols-4 gap-4 p-1">
-              {LOCALES.map((locale) => {
-                const isEnglish = ENGLISH_LOCALES.has(locale.code);
+              {/* Single English card */}
+              <div className="flex flex-col items-center gap-1">
+                <p className="text-xs font-medium text-foreground text-center">English</p>
+                <canvas
+                  ref={(el) => {
+                    if (!el || !showPreviewLocales) return;
+                    drawComposite(el, {
+                      device, showBezel, screenshotImage,
+                      textLine1, textLine2,
+                      textPosition, fontSize, textColor, textShadow, fontWeight,
+                      bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
+                      autoFitText, fontFamily: selectedFont,
+                      frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
+                      frameLayout, orientation
+                    });
+                  }}
+                  style={{ width: '100%', height: 'auto', borderRadius: '4px' }}
+                  aria-label="Preview for English"
+                />
+              </div>
+              {/* Translated locales */}
+              {LOCALES.filter((l) => !ENGLISH_LOCALES.has(l.code) && translations[l.code]).map((locale) => {
                 const t = translations[locale.code];
-                if (!isEnglish && !t) return null;
-
-                const line1 = isEnglish ? textLine1 : (t?.line1 || textLine1);
-                const line2 = isEnglish ? textLine2 : (t?.line2 || textLine2);
-
                 return (
                   <div key={locale.code} className="flex flex-col items-center gap-1">
+                    <p className="text-xs font-medium text-foreground text-center">
+                      {locale.name}
+                    </p>
                     <canvas
                       ref={(el) => {
                         if (!el || !showPreviewLocales) return;
-                        const state = {
+                        drawComposite(el, {
                           device, showBezel, screenshotImage,
-                          textLine1: line1, textLine2: line2,
+                          textLine1: t?.line1 || textLine1, textLine2: t?.line2 || textLine2,
                           textPosition, fontSize, textColor, textShadow, fontWeight,
                           bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
                           autoFitText, fontFamily: selectedFont,
                           frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
                           frameLayout, orientation
-                        };
-                        drawComposite(el, state);
+                        });
                       }}
                       style={{ width: '100%', height: 'auto', borderRadius: '4px' }}
                       aria-label={`Preview for ${locale.name}`}
                     />
-                    <p className="text-xs text-muted-foreground text-center">
-                      {locale.name}
-                    </p>
                   </div>
                 );
               })}
             </div>
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
 

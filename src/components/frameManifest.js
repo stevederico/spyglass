@@ -117,9 +117,9 @@ export const FRAME_MODELS = {
     screenHeight: 2868,
     ascTier: 'iphone-69',
     colors: [
+      { slug: 'silver', label: 'Silver' },
       { slug: 'cosmic-orange', label: 'Cosmic Orange' },
-      { slug: 'deep-blue', label: 'Deep Blue' },
-      { slug: 'silver', label: 'Silver' }
+      { slug: 'deep-blue', label: 'Deep Blue' }
     ],
     defaultColor: 'silver'
   },

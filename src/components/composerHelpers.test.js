@@ -131,9 +131,9 @@ describe('fitTextToBox', () => {
     expect(result.fontSize).toBe(16);
   });
 
-  it('wraps long text into multiple lines', () => {
+  it('returns text as single line', () => {
     const result = fitTextToBox(ctx, 'Hello World', 60, 200, 24, '700');
-    expect(result.lines.length).toBeGreaterThanOrEqual(2);
+    expect(result.lines).toEqual(['Hello World']);
   });
 
   it('keeps single word on one line', () => {

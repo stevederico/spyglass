@@ -4,6 +4,15 @@
 - ASO keyword tool
 - CLI tool (browserless usage)
 
+0.9.1
+
+  Remove unused dependencies
+  Remove legacy useHistory hook
+  Remove tool-style CSS classes
+  Update README API docs
+  Update composerHelpers rendering
+  Update BatchExportDialog progress
+
 0.9.0
 
   Add multi-screenshot slots

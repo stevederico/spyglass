@@ -20,6 +20,39 @@ export const DEVICES = {
   'ipad-105':   { label: 'iPad 10.5"', width: 1668, height: 2224, radius: 0, bezelWidth: 16 }
 };
 
+/**
+ * Detect whether a device key is iPhone or iPad
+ *
+ * @param {string} deviceKey - Device key from DEVICES
+ * @returns {'iphone'|'ipad'} Device family
+ */
+export function getDeviceFamily(deviceKey) {
+  return deviceKey.startsWith('ipad') ? 'ipad' : 'iphone';
+}
+
+/**
+ * Detect device family from screenshot image dimensions.
+ * iPhones have w/h ratio ~0.46, iPads ~0.70-0.75.
+ *
+ * @param {HTMLImageElement} img - Screenshot image element
+ * @returns {'iphone'|'ipad'} Detected device family
+ */
+export function detectFamilyFromImage(img) {
+  const w = Math.min(img.width, img.height);
+  const h = Math.max(img.width, img.height);
+  return (w / h) >= 0.6 ? 'ipad' : 'iphone';
+}
+
+/**
+ * Get the default device key for a given family
+ *
+ * @param {'iphone'|'ipad'} family - Device family
+ * @returns {string} Default device key
+ */
+export function getDefaultDeviceForFamily(family) {
+  return family === 'ipad' ? 'ipad-13' : 'iphone-69';
+}
+
 /** Font weight label-to-CSS value mapping */
 export const FONT_WEIGHTS = {
   Light: '300',
@@ -56,50 +89,30 @@ export function buildFontString(fontWeight, fontSize, fontFamily) {
  * @param {string} [fontFamily] - Optional custom font family name
  * @returns {{ fontSize: number, lines: string[] }} Fitted font size and wrapped lines
  */
+/**
+ * Scale font size down until text fits within maxWidth as a single line.
+ * Returns the fitted font size and the text as a single-element lines array.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} text
+ * @param {number} maxWidth
+ * @param {number} maxHeight - Unused, kept for API compat
+ * @param {number} initialFontSize
+ * @param {number} fontWeight
+ * @param {string} fontFamily
+ * @returns {{ fontSize: number, lines: string[] }}
+ */
 export function fitTextToBox(ctx, text, maxWidth, maxHeight, initialFontSize, fontWeight, fontFamily) {
   const MIN_FONT_SIZE = 16;
   let fontSize = initialFontSize;
 
-  while (fontSize > MIN_FONT_SIZE) {
-    ctx.font = buildFontString(fontWeight, fontSize, fontFamily);
-    const words = text.split(' ');
-    const lines = [];
-    let currentLine = '';
-
-    for (const word of words) {
-      const testLine = currentLine + word + ' ';
-      if (ctx.measureText(testLine).width > maxWidth && currentLine) {
-        lines.push(currentLine.trim());
-        currentLine = word + ' ';
-      } else {
-        currentLine = testLine;
-      }
-    }
-    lines.push(currentLine.trim());
-
-    const totalHeight = lines.length * fontSize * 1.3;
-    if (totalHeight <= maxHeight) {
-      return { fontSize, lines };
-    }
+  ctx.font = buildFontString(fontWeight, fontSize, fontFamily);
+  while (ctx.measureText(text).width > maxWidth && fontSize > MIN_FONT_SIZE) {
     fontSize -= 2;
+    ctx.font = buildFontString(fontWeight, fontSize, fontFamily);
   }
 
-  // Floor: return at minimum size
-  ctx.font = buildFontString(fontWeight, MIN_FONT_SIZE, fontFamily);
-  const words = text.split(' ');
-  const lines = [];
-  let currentLine = '';
-  for (const word of words) {
-    const testLine = currentLine + word + ' ';
-    if (ctx.measureText(testLine).width > maxWidth && currentLine) {
-      lines.push(currentLine.trim());
-      currentLine = word + ' ';
-    } else {
-      currentLine = testLine;
-    }
-  }
-  lines.push(currentLine.trim());
-  return { fontSize: MIN_FONT_SIZE, lines };
+  return { fontSize, lines: [text] };
 }
 
 /**
@@ -186,6 +199,31 @@ function drawBackground(ctx, w, h, settings) {
  * @param {number} radius - Screen corner radius
  * @param {number} bezelWidth - Bezel border width in pixels
  */
+/**
+ * Draw an image into a destination rect using cover-fit (aspect-fill).
+ * Scales the image to fill the rect completely, cropping overflow.
+ *
+ * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+ * @param {HTMLImageElement} img - Source image element
+ * @param {number} dx - Destination x
+ * @param {number} dy - Destination y
+ * @param {number} dw - Destination width
+ * @param {number} dh - Destination height
+ */
+function drawImageCover(ctx, img, dx, dy, dw, dh) {
+  const imgRatio = img.width / img.height;
+  const destRatio = dw / dh;
+  let sx = 0, sy = 0, sw = img.width, sh = img.height;
+  if (imgRatio > destRatio) {
+    sw = img.height * destRatio;
+    sx = (img.width - sw) / 2;
+  } else {
+    sh = img.width / destRatio;
+    sy = (img.height - sh) / 2;
+  }
+  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+
 function drawDeviceFrame(ctx, x, y, w, h, radius, bezelWidth) {
   ctx.fillStyle = '#1a1a1a';
   drawRoundedRect(ctx, x - bezelWidth, y - bezelWidth, w + bezelWidth * 2, h + bezelWidth * 2, radius + bezelWidth);
@@ -214,6 +252,22 @@ function drawDeviceFrame(ctx, x, y, w, h, radius, bezelWidth) {
  * @param {number} [maxHeight] - Optional max height to auto-fit text into
  * @param {string} [fontFamily] - Optional custom font family name
  */
+/**
+ * Draw marketing text on canvas as a single line, scaling font down to fit maxWidth.
+ * Never word-wraps — always renders on one line.
+ *
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {string} text
+ * @param {number} x - Center x position
+ * @param {number} y - Baseline y position
+ * @param {number} maxWidth - Maximum pixel width for the text
+ * @param {number} fontSize - Starting font size
+ * @param {string} color - Fill color
+ * @param {number} shadowBlur - Shadow blur radius
+ * @param {number} fontWeight - CSS font weight value
+ * @param {number} maxHeight - Unused, kept for API compat
+ * @param {string} fontFamily - CSS font family
+ */
 function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, shadowBlur, fontWeight, maxHeight, fontFamily) {
   if (!text) return;
 
@@ -227,32 +281,16 @@ function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, shadowBlu
     ctx.shadowOffsetY = Math.round(shadowBlur / 2);
   }
 
-  if (maxHeight) {
-    const { fontSize: fittedSize, lines } = fitTextToBox(ctx, text, maxWidth, maxHeight, fontSize, fontWeight, fontFamily);
-    ctx.font = buildFontString(fontWeight, fittedSize, fontFamily);
-    let lineY = y;
-    for (const line of lines) {
-      ctx.fillText(line, x, lineY);
-      lineY += fittedSize * 1.3;
-    }
-  } else {
-    ctx.font = buildFontString(fontWeight, fontSize, fontFamily);
-    const words = text.split(' ');
-    let line = '';
-    let lineY = y;
-
-    for (const word of words) {
-      const testLine = line + word + ' ';
-      if (ctx.measureText(testLine).width > maxWidth && line) {
-        ctx.fillText(line.trim(), x, lineY);
-        line = word + ' ';
-        lineY += fontSize * 1.3;
-      } else {
-        line = testLine;
-      }
-    }
-    ctx.fillText(line.trim(), x, lineY);
+  // Scale font down until text fits on a single line
+  const MIN_FONT_SIZE = 16;
+  let size = fontSize;
+  ctx.font = buildFontString(fontWeight, size, fontFamily);
+  while (ctx.measureText(text).width > maxWidth && size > MIN_FONT_SIZE) {
+    size -= 2;
+    ctx.font = buildFontString(fontWeight, size, fontFamily);
   }
+
+  ctx.fillText(text, x, y);
 
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
@@ -405,7 +443,7 @@ export function drawComposite(canvas, state) {
   if (vis.device && isFullscreen) {
     // Fullscreen: screenshot fills entire canvas, no frame or bezel
     if (state.screenshotImage) {
-      ctx.drawImage(state.screenshotImage, 0, 0, cw, ch);
+      drawImageCover(ctx, state.screenshotImage, 0, 0, cw, ch);
     } else {
       ctx.fillStyle = '#2a2a3e';
       ctx.fillRect(0, 0, cw, ch);
@@ -428,7 +466,7 @@ export function drawComposite(canvas, state) {
       drawRoundedRect(ctx, frameX, frameY, frameW, frameH, scaledRadius);
       ctx.clip();
       if (state.screenshotImage) {
-        ctx.drawImage(state.screenshotImage, frameX, frameY, frameW, frameH);
+        drawImageCover(ctx, state.screenshotImage, frameX, frameY, frameW, frameH);
       } else {
         ctx.fillStyle = '#2a2a3e';
         ctx.fillRect(frameX, frameY, frameW, frameH);
@@ -451,7 +489,7 @@ export function drawComposite(canvas, state) {
       }
 
       if (state.screenshotImage) {
-        ctx.drawImage(state.screenshotImage, frameX, frameY, frameW, frameH);
+        drawImageCover(ctx, state.screenshotImage, frameX, frameY, frameW, frameH);
       } else {
         ctx.fillStyle = '#2a2a3e';
         ctx.fillRect(frameX, frameY, frameW, frameH);

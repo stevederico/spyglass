@@ -23,29 +23,33 @@ Built on [Skateboard](https://github.com/stevederico/skateboard) with React 19, 
 ## Features
 
 **Screenshots** — Canvas-based screenshot composer
-- Solid color, gradient, image, or AI-generated backgrounds
+- Multi-screenshot slots with filmstrip navigation for managing multiple screenshots per locale
+- Per-slot undo/redo with keyboard shortcuts (Cmd+Z / Cmd+Shift+Z)
+- Slot duplicate, remove, and drag-to-reorder
+- Solid color, gradient, image, or AI-generated backgrounds (via xAI Grok)
 - Real device frame PNGs for iPhone 16/17 and iPad models with color variants
-- Marketing text with Google Fonts, auto-fit sizing, shadow, and layer visibility toggles
+- Marketing text with Google Fonts or custom uploaded fonts, auto-fit sizing (16px minimum), shadow, and layer visibility toggles
 - Portrait and landscape orientation support
 - Selective locale translation into 28 App Store locales
-- Template system with save/load presets
-- Undo/redo history with keyboard shortcuts (Cmd+Z)
+- Template system with save/load/duplicate presets
 - Drag-and-drop screenshot upload
 - Session state persistence across page reloads
 
 **Metadata** — App Store metadata editor
 - Localized editing for name, subtitle, description, keywords, and what's new
 - Character count validation per field
-- AI-powered metadata generation
+- AI-powered metadata generation via xAI Grok with tone selector
+- Bulk metadata generation across fields
+- AI copywriting improvement for existing text
 - ASO keyword suggestions
 - Diff view before saving
 - Version history with snapshot restore
 - Push metadata directly to App Store Connect API
 
 **Exports** — Batch export and package management
-- Batch render all devices and locales in one click
+- Multi-slot batch render across all devices and locales
 - Export packages with thumbnail previews
-- Zip download with ASC-ready file naming
+- Zip download with ASC-ready file naming (fflate compression)
 - Package status tracking
 
 **Settings** — App Store Connect API integration
@@ -126,6 +130,9 @@ ASC_KEY_ID=your_key_id
 ASC_ISSUER_ID=your_issuer_id
 ASC_PRIVATE_KEY_PATH=./AuthKey.p8
 
+# xAI Grok (optional, enables AI metadata generation and background images)
+XAI_API_KEY=your_xai_api_key
+
 # LibreTranslate (optional, defaults to public instance)
 LIBRETRANSLATE_URL=https://libretranslate.com/translate
 LIBRETRANSLATE_API_KEY=
@@ -145,6 +152,7 @@ LIBRETRANSLATE_API_KEY=
 | GET | `/api/asc/apps/:id/screenshots` | Get screenshot sets |
 | POST | `/api/asc/apps/:id/screenshots` | Upload screenshot (3-step) |
 | DELETE | `/api/asc/screenshots/:id` | Delete screenshot |
+| GET | `/api/asc/simulators` | List available iOS simulators (macOS only) |
 | POST | `/api/asc/screenshots/capture` | Capture from iOS simulators (macOS only) |
 
 ### Translation
@@ -171,20 +179,34 @@ LIBRETRANSLATE_API_KEY=
 |---|---|---|
 | GET | `/api/templates` | List saved templates |
 | POST | `/api/templates` | Save a template |
+| PATCH | `/api/templates/:id` | Update a template |
+| POST | `/api/templates/:id/duplicate` | Duplicate a template |
 | DELETE | `/api/templates/:id` | Delete a template |
+| GET | `/api/templates/fonts` | List custom fonts |
+| POST | `/api/templates/fonts` | Upload font file |
+| GET | `/api/templates/fonts/:id/file` | Get font file |
+| DELETE | `/api/templates/fonts/:id` | Delete custom font |
 
 ### Metadata History
 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/api/metadata-history/:appId` | Get version history |
-| POST | `/api/metadata-history/:appId` | Save metadata snapshot |
+| POST | `/api/metadata-history` | Save metadata snapshot |
+| GET | `/api/metadata-history/snapshot/:id` | Get snapshot by ID |
+| DELETE | `/api/metadata-history/snapshot/:id` | Delete snapshot |
 
-### AI
+### AI (xAI Grok)
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/ai/suggest-keywords` | Generate ASO keyword suggestions |
+| POST | `/api/ai/generate-metadata` | Generate full metadata (name, subtitle, description, keywords, what's new) |
+| POST | `/api/ai/generate-description` | Generate app description |
+| POST | `/api/ai/generate-keywords` | Generate keyword suggestions |
+| POST | `/api/ai/generate-whats-new` | Generate what's new text |
+| POST | `/api/ai/improve-text` | Improve existing copywriting |
+| POST | `/api/ai/suggest-keywords` | ASO keyword analysis |
+| POST | `/api/ai/generate-background` | Generate AI background image |
 
 ## Project Structure
 
@@ -199,11 +221,14 @@ spyglass/
 │   │   ├── SettingsView.jsx       # ASC credentials
 │   │   ├── AppContext.jsx         # Shared app selection state
 │   │   ├── AppPicker.jsx          # App selector dropdown
+│   │   ├── Filmstrip.jsx          # Horizontal slot thumbnail navigation
 │   │   ├── TemplatePanel.jsx      # Template save/load panel
-│   │   ├── BatchExportDialog.jsx  # Batch export dialog
+│   │   ├── BatchExportDialog.jsx  # Multi-slot batch export dialog
 │   │   ├── composerHelpers.js     # Canvas drawing utilities
 │   │   ├── frameManifest.js       # Device frame registry
 │   │   ├── frameLoader.js         # Frame PNG lazy loader
+│   │   ├── useSlots.js            # Multi-slot state management hook
+│   │   ├── useSlotHistory.js      # Per-slot undo/redo hook
 │   │   └── useSessionState.js     # Session-persistent state hook
 │   ├── main.jsx                   # Routes and app config
 │   ├── constants.json             # App configuration
@@ -216,7 +241,7 @@ spyglass/
 │   ├── exports.js                 # Export package routes
 │   ├── templates.js               # Template CRUD routes
 │   ├── metadataHistory.js         # Metadata version history
-│   ├── ai.js                      # AI/keyword suggestion routes
+│   ├── ai.js                      # AI metadata generation routes (xAI Grok)
 │   └── adapters/                  # Database adapters (SQLite, PostgreSQL, MongoDB)
 ├── cli/                           # CLI tool (WIP)
 └── package.json
@@ -250,9 +275,12 @@ All other features — screenshot composition, metadata editing, App Store Conne
 | Vite 7.1+ | Build tool |
 | Tailwind CSS v4 | Styling |
 | shadcn/ui | Component library |
+| Canvas API | Screenshot rendering and composition |
 | Hono | Backend server |
 | SQLite | Database |
 | Vitest | Testing |
+| xAI Grok | AI metadata generation and background images |
+| fflate | Zip compression for batch exports |
 | App Store Connect API | Screenshot and metadata management |
 | LibreTranslate | Marketing text translation |
 

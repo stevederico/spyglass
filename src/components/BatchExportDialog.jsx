@@ -26,7 +26,7 @@ import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
 import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
 import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
 import { toast } from 'sonner';
-import { DEVICES, drawComposite } from './composerHelpers.js';
+import { DEVICES, drawComposite, getDeviceFamily, detectFamilyFromImage } from './composerHelpers.js';
 
 /** All available device keys with labels */
 const DEVICE_ENTRIES = Object.entries(DEVICES).map(([key, dev]) => ({
@@ -69,11 +69,22 @@ function renderToBytes(state) {
 }
 
 export default function BatchExportDialog({ open, onOpenChange, baseState, translations, appName, appId, slots }) {
+  /** Filter devices to match screenshot family — ASC rejects mismatched screenshots */
+  const screenshotFamily = baseState.screenshotImage
+    ? detectFamilyFromImage(baseState.screenshotImage)
+    : 'iphone';
+  const allowedDevices = DEVICE_ENTRIES.filter((d) => getDeviceFamily(d.key) === screenshotFamily);
+  /** Default to only the required device: iPhone 6.9" or iPad 13" */
+  const requiredDevice = screenshotFamily === 'ipad' ? 'ipad-13' : 'iphone-69';
+
   const [selectedDevices, setSelectedDevices] = useState(
-    new Set(DEVICE_ENTRIES.map((d) => d.key))
+    new Set([requiredDevice])
   );
   const [selectedLocales, setSelectedLocales] = useState(
     new Set(Object.keys(translations || {}))
+  );
+  const [selectedSlots, setSelectedSlots] = useState(
+    () => new Set(slots ? slots.map((_, i) => i) : [0])
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -101,10 +112,10 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
 
   /** Select or deselect all devices */
   function toggleAllDevices() {
-    if (selectedDevices.size === DEVICE_ENTRIES.length) {
+    if (selectedDevices.size === allowedDevices.length) {
       setSelectedDevices(new Set());
     } else {
-      setSelectedDevices(new Set(DEVICE_ENTRIES.map((d) => d.key)));
+      setSelectedDevices(new Set(allowedDevices.map((d) => d.key)));
     }
   }
 
@@ -118,7 +129,27 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
     }
   }
 
-  const slotCount = slots && slots.length > 1 ? slots.length : 1;
+  /** Toggle a slot in the selection set */
+  function toggleSlot(index) {
+    setSelectedSlots((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
+
+  /** Select or deselect all slots */
+  function toggleAllSlots() {
+    if (!slots) return;
+    if (selectedSlots.size === slots.length) {
+      setSelectedSlots(new Set());
+    } else {
+      setSelectedSlots(new Set(slots.map((_, i) => i)));
+    }
+  }
+
+  const slotCount = slots && slots.length > 1 ? selectedSlots.size : 1;
   const totalCombinations = selectedDevices.size * selectedLocales.size * slotCount;
 
   /**
@@ -140,7 +171,9 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
     const total = selectedDevices.size * selectedLocales.size * slotCount;
     const localeArray = [...selectedLocales];
     const deviceArray = [...selectedDevices];
-    const slotSources = slots && slots.length > 1 ? slots : [baseState];
+    const slotSources = slots && slots.length > 1
+      ? slots.filter((_, i) => selectedSlots.has(i))
+      : [baseState];
 
     for (const locale of localeArray) {
       const t = translations[locale];
@@ -219,7 +252,7 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
     setIsGenerating(false);
     setProgress(100);
     setProgressLabel('Complete');
-  }, [selectedDevices, selectedLocales, baseState, translations, appName, appId, onOpenChange, slots, slotCount]);
+  }, [selectedDevices, selectedLocales, selectedSlots, baseState, translations, appName, appId, onOpenChange, slots, slotCount]);
 
   const translatedLocales = Object.entries(translations || {}).filter(
     ([, t]) => t.status !== 'error'
@@ -233,6 +266,54 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
         </SheetHeader>
 
         <div className="mt-4 flex flex-col gap-4">
+          {/* Screenshots */}
+          {slots && slots.length > 1 && (
+            <>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">Screenshots</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs"
+                    onClick={toggleAllSlots}
+                    aria-label={selectedSlots.size === slots.length ? 'Deselect all screenshots' : 'Select all screenshots'}
+                  >
+                    {selectedSlots.size === slots.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                </div>
+                <div className="flex gap-2 overflow-x-auto rounded-md border p-2">
+                  {slots.map((slot, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => toggleSlot(i)}
+                      className={`flex shrink-0 flex-col items-center gap-1 rounded-md p-1 transition-colors ${selectedSlots.has(i) ? 'bg-accent ring-1 ring-primary' : 'opacity-40'}`}
+                      aria-label={`${selectedSlots.has(i) ? 'Deselect' : 'Select'} screenshot ${i + 1}`}
+                    >
+                      <canvas
+                        ref={(el) => {
+                          if (!el) return;
+                          drawComposite(el, {
+                            ...slot,
+                            fontFamily: slot.selectedFont || slot.fontFamily || '',
+                            frameModelInfo: slot.frameModel ? null : null,
+                          });
+                        }}
+                        className="rounded border border-border/50"
+                        style={{ width: '64px', height: 'auto' }}
+                        aria-hidden="true"
+                      />
+                      <span className="text-[10px] text-muted-foreground">#{i + 1}</span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">{selectedSlots.size} of {slots.length} selected</p>
+              </div>
+              <Separator />
+            </>
+          )}
+
           {/* Devices */}
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between">
@@ -242,14 +323,14 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
                 size="sm"
                 className="h-6 text-xs"
                 onClick={toggleAllDevices}
-                aria-label={selectedDevices.size === DEVICE_ENTRIES.length ? 'Deselect all devices' : 'Select all devices'}
+                aria-label={selectedDevices.size === allowedDevices.length ? 'Deselect all devices' : 'Select all devices'}
               >
-                {selectedDevices.size === DEVICE_ENTRIES.length ? 'Deselect All' : 'Select All'}
+                {selectedDevices.size === allowedDevices.length ? 'Deselect All' : 'Select All'}
               </Button>
             </div>
             <ScrollArea className="h-48 rounded-md border p-2">
               <div className="flex flex-col gap-1.5">
-                {DEVICE_ENTRIES.map((d) => (
+                {allowedDevices.map((d) => (
                   <div key={d.key} className="flex items-center gap-2">
                     <Checkbox
                       id={`dev-${d.key}`}
