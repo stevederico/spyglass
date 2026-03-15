@@ -18,14 +18,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Card, CardHeader, CardTitle, CardContent } from '@stevederico/skateboard-ui/shadcn/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
 import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
 import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
 import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
-import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
-import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
 import { toast } from 'sonner';
 import { STARTER_TEMPLATES } from './composerHelpers.js';
 
@@ -245,61 +242,29 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
   }, []);
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base">Templates</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {/* Save current state */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setIsDialogOpen(true)}
-          aria-label="Save current settings as a template"
-        >
-          Save Current
+    <div className="px-3 py-2.5">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Templates</h3>
+        <Button variant="ghost" size="sm" className="h-5 px-1.5 text-xs" onClick={() => setIsDialogOpen(true)} aria-label="Save current settings as a template">
+          + Save
         </Button>
-
-        {/* Template list */}
+      </div>
+      <div className="flex flex-col gap-2">
         {templates.length > 0 && (
-          <ScrollArea className="max-h-[240px]">
-            <div className="flex flex-col gap-2">
+          <ScrollArea className="max-h-[160px]">
+            <div className="flex flex-col gap-1">
               {templates.map((template) => (
-                <div
-                  key={template.id}
-                  className="flex items-center justify-between gap-2 rounded-md border border-border p-2"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="truncate text-sm font-medium">{template.name}</span>
-                    <Badge variant={isStarterTemplate(template.name) ? 'secondary' : 'outline'} className="text-xs shrink-0">
-                      {isStarterTemplate(template.name) ? 'Starter' : 'Custom'}
-                    </Badge>
+                <div key={template.id} className="group flex items-center justify-between rounded px-1.5 py-1 hover:bg-accent/30">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="truncate text-xs font-medium">{template.name}</span>
+                    {isStarterTemplate(template.name) && (
+                      <span className="shrink-0 text-[10px] text-muted-foreground/50">preset</span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onLoadTemplate(template.settings)}
-                      aria-label={`Load template ${template.name}`}
-                    >
-                      Load
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDuplicate(template.id)}
-                      aria-label={`Duplicate template ${template.name}`}
-                    >
-                      Copy
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(template.id)}
-                      aria-label={`Delete template ${template.name}`}
-                    >
-                      Delete
-                    </Button>
+                  <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button onClick={() => onLoadTemplate(template.settings)} className="rounded px-1 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Load template ${template.name}`}>Load</button>
+                    <button onClick={() => handleDuplicate(template.id)} className="rounded px-1 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Duplicate template ${template.name}`}>Copy</button>
+                    <button onClick={() => handleDelete(template.id)} className="rounded px-1 py-0.5 text-xs text-destructive hover:bg-destructive/10" aria-label={`Delete template ${template.name}`}>Del</button>
                   </div>
                 </div>
               ))}
@@ -307,100 +272,54 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
           </ScrollArea>
         )}
 
-        <Separator />
-
-        {/* Font management */}
-        <div className="flex flex-col gap-3">
-          <Label htmlFor="font-family-select">Font Family</Label>
-          <Select value={selectedFont || 'system-default'} onValueChange={(val) => onFontChange(val === 'system-default' ? '' : val)}>
-            <SelectTrigger id="font-family-select" aria-label="Font family selection">
-              <SelectValue>
-                {selectedFont || 'System Default'}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="system-default">System Default</SelectItem>
-              {fonts.map((font) => (
-                <SelectItem key={font.id} value={font.name}>{font.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => fontInputRef.current?.click()}
-              aria-label="Upload custom font file"
-            >
-              Upload Font
+        {/* Font */}
+        <div className="flex flex-col gap-1.5 border-t border-border/30 pt-2">
+          <div className="flex items-center gap-1.5">
+            <Select value={selectedFont || 'system-default'} onValueChange={(val) => onFontChange(val === 'system-default' ? '' : val)}>
+              <SelectTrigger id="font-family-select" className="h-7 flex-1 text-xs" aria-label="Font family selection">
+                <SelectValue>{selectedFont || 'System Default'}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="system-default">System Default</SelectItem>
+                {fonts.map((font) => (
+                  <SelectItem key={font.id} value={font.name}>{font.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm" className="h-7 shrink-0 text-xs" onClick={() => fontInputRef.current?.click()} aria-label="Upload custom font file">
+              Upload
             </Button>
-            <input
-              ref={fontInputRef}
-              type="file"
-              accept=".ttf,.otf"
-              onChange={handleFontUpload}
-              className="hidden"
-              aria-label="Font file input"
-            />
+            <input ref={fontInputRef} type="file" accept=".ttf,.otf" onChange={handleFontUpload} className="hidden" aria-label="Font file input" />
           </div>
-
           {fonts.length > 0 && (
             <div className="flex flex-wrap gap-1">
               {fonts.map((font) => (
-                <Badge key={font.id} variant="outline" className="gap-1">
+                <span key={font.id} className="inline-flex items-center gap-0.5 rounded bg-accent/40 px-1.5 py-0.5 text-xs">
                   {font.name}
-                  <button
-                    onClick={() => handleDeleteFont(font.id)}
-                    className="ml-1 text-muted-foreground hover:text-foreground"
-                    aria-label={`Delete font ${font.name}`}
-                  >
-                    &times;
-                  </button>
-                </Badge>
+                  <button onClick={() => handleDeleteFont(font.id)} className="text-muted-foreground hover:text-foreground" aria-label={`Delete font ${font.name}`}>&times;</button>
+                </span>
               ))}
             </div>
           )}
         </div>
+      </div>
 
-        {/* Save template dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Save Template</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-3 py-4">
-              <Label htmlFor="template-name-input">Template Name</Label>
-              <Input
-                id="template-name-input"
-                value={templateName}
-                onChange={(e) => setTemplateName(e.target.value)}
-                placeholder="My Template"
-                aria-label="Template name"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleSave();
-                }}
-              />
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsDialogOpen(false)}
-                aria-label="Cancel saving template"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={isSaving || !templateName.trim()}
-                aria-label="Confirm save template"
-              >
-                {isSaving ? 'Saving...' : 'Save'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </CardContent>
-    </Card>
+      {/* Save template dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Save Template</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-3 py-4">
+            <Label htmlFor="template-name-input">Template Name</Label>
+            <Input id="template-name-input" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="My Template" aria-label="Template name" onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} aria-label="Cancel saving template">Cancel</Button>
+            <Button onClick={handleSave} disabled={isSaving || !templateName.trim()} aria-label="Confirm save template">{isSaving ? 'Saving...' : 'Save'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

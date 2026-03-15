@@ -14,6 +14,7 @@ import ScreenshotsView from './components/ScreenshotsView.jsx';
 import ExportsView from './components/ExportsView.jsx';
 import MetadataView from './components/MetadataView.jsx';
 import SettingsView from './components/SettingsView.jsx';
+import LandingView from './components/LandingView.jsx';
 import { AppProvider } from './components/AppContext.jsx';
 
 /**
@@ -40,6 +41,7 @@ createSkateboardApp({
   constants,
   appRoutes,
   defaultRoute: 'home',
+  landingPage: <LandingView />,
   wrapper: AppProvider,
   overrides: {
     settings: SettingsView

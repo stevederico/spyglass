@@ -2,29 +2,29 @@
     "version": "0.2.0",
     "appName": "Spyglass",
     "appIcon": "eye",
-    "tagline": "App Store Connect Screenshot & Metadata Manager",
+    "tagline": "App Store screenshots, done right.",
     "cta": "Get Started",
     "ctaHeading": "Ready to Get Started?",
     "noLogin": false,
     "authOverlay": true,
     "sidebarCollapsed": false,
     "features": {
-        "title": "Everything You Need",
+        "title": "Everything you need to ship",
         "items": [
             {
-                "icon": "🔐",
-                "title": "Authentication",
-                "description": "Complete user management with JWT tokens and secure sessions"
+                "icon": "📸",
+                "title": "Canvas Composer",
+                "description": "Layer backgrounds, device frames, and marketing text on a live preview"
             },
             {
-                "icon": "💳",
-                "title": "Stripe Payments",
-                "description": "Ready-to-use checkout flows and subscription management"
+                "icon": "🌍",
+                "title": "28 Locales",
+                "description": "Auto-translate marketing text and metadata to every App Store language"
             },
             {
-                "icon": "🎨",
-                "title": "Beautiful UI",
-                "description": "50+ Shadcn components with dark mode support"
+                "icon": "📦",
+                "title": "Batch Export",
+                "description": "10 device sizes x 28 locales in one click with ASC-ready naming"
             }
         ]
     },

@@ -1,9 +1,9 @@
 /**
  * Export package gallery showing completed screenshot + metadata bundles
  *
- * Displays packages created from Screenshots's batch export flow. Each package
- * contains screenshots across devices and locales, bundled with metadata.
- * Supports downloading as zip, uploading to ASC, and deletion.
+ * Displays packages created from the Screenshots batch export flow.
+ * Each package contains screenshots across devices and locales, bundled
+ * with metadata. Supports downloading as zip and deletion.
  *
  * @component
  * @returns {JSX.Element} Export package gallery
@@ -12,11 +12,8 @@ import { useState, useEffect, useCallback } from 'react';
 import Header from '@stevederico/skateboard-ui/Header';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@stevederico/skateboard-ui/shadcn/ui/card';
 import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
-import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
-import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
 import { Spinner } from '@stevederico/skateboard-ui/shadcn/ui/spinner';
 import { toast } from 'sonner';
 import { useApp } from './AppContext.jsx';
@@ -35,6 +32,25 @@ function getStatusBadge(status) {
     case 'draft': return { label: 'Draft', variant: 'outline' };
     default: return { label: status, variant: 'outline' };
   }
+}
+
+/**
+ * Format a date string to a compact relative or absolute display
+ *
+ * @param {string} dateStr - ISO date string
+ * @returns {string} Formatted date
+ */
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = now - d;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 export default function ExportsView() {
@@ -76,7 +92,6 @@ export default function ExportsView() {
       setExpandedFiles(result?.files || []);
     } catch (err) {
       console.error('Failed to fetch package files:', err);
-      toast.error('Failed to load package files');
       setExpandedFiles([]);
     }
   }, []);
@@ -99,9 +114,7 @@ export default function ExportsView() {
   const handleDownload = useCallback(async (pkg) => {
     setDownloadingId(pkg.id);
     try {
-      const response = await fetch(`/api/exports/${pkg.id}/download`, {
-        credentials: 'include'
-      });
+      const response = await fetch(`/api/exports/${pkg.id}/download`, { credentials: 'include' });
       if (!response.ok) throw new Error('Download failed');
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -165,131 +178,128 @@ export default function ExportsView() {
 
       {!selectedApp ? (
         <div className="flex flex-1 items-center justify-center">
-          <p className="text-muted-foreground">Select an app to get started</p>
+          <p className="text-xs text-muted-foreground/50">Select an app to get started</p>
         </div>
       ) : isLoading ? (
         <div className="flex flex-1 items-center justify-center">
           <Spinner aria-label="Loading export packages" />
         </div>
       ) : packages.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3">
-          <p className="text-lg font-medium text-muted-foreground">No exports yet</p>
-          <p className="text-sm text-muted-foreground">Create one from Screenshots using Batch Export</p>
+        <div className="flex flex-1 flex-col items-center justify-center gap-2">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" className="text-muted-foreground/20" aria-hidden="true">
+            <rect x="2" y="3" width="20" height="18" rx="2" />
+            <path d="M2 9h20" />
+            <path d="M10 3v6" />
+          </svg>
+          <p className="text-sm text-muted-foreground/60">No exports yet</p>
+          <p className="text-[11px] text-muted-foreground/30">Create one from Screenshots using Batch Export</p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4 p-4 md:p-6">
-          {packages.map((pkg) => (
-            <Card key={pkg.id} className="overflow-hidden">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CardTitle className="text-base">{pkg.app_name}</CardTitle>
-                    <Badge variant={getStatusBadge(pkg.status).variant}>
-                      {getStatusBadge(pkg.status).label}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(pkg.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-                <CardDescription>
-                  {pkg.locales?.length || 0} locales · {pkg.devices?.length || 0} devices · {pkg.screenshot_count} screenshots
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {/* Locale badges */}
-                <div className="flex flex-wrap gap-1">
-                  {(pkg.locales || []).slice(0, 8).map((l) => (
-                    <Badge key={l} variant="outline" className="text-[10px]">{l}</Badge>
-                  ))}
-                  {(pkg.locales || []).length > 8 && (
-                    <Badge variant="outline" className="text-[10px]">+{pkg.locales.length - 8} more</Badge>
-                  )}
-                </div>
+        <div className="flex flex-col gap-px p-3">
+          {packages.map((pkg) => {
+            const { label: statusLabel, variant: statusVariant } = getStatusBadge(pkg.status);
+            const isExpanded = expandedId === pkg.id;
 
-                <Separator />
-
-                {/* Actions */}
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
+            return (
+              <div key={pkg.id} className="package-card">
+                {/* Package row */}
+                <div className="flex items-center gap-3 px-3 py-2.5">
+                  <button
+                    className="flex flex-1 items-center gap-3 text-left"
                     onClick={() => handleExpand(pkg.id)}
-                    aria-label={expandedId === pkg.id ? 'Collapse package details' : 'Expand package details'}
+                    aria-label={isExpanded ? `Collapse ${pkg.app_name}` : `Expand ${pkg.app_name}`}
+                    aria-expanded={isExpanded}
                   >
-                    {expandedId === pkg.id ? 'Collapse' : 'Preview'}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDownload(pkg)}
-                    disabled={downloadingId === pkg.id}
-                    aria-label={`Download ${pkg.app_name} export as zip`}
-                  >
-                    {downloadingId === pkg.id ? 'Downloading...' : 'Download Zip'}
-                  </Button>
-                  <div className="flex-1" />
+                    <svg
+                      width="10" height="10" viewBox="0 0 10 10" fill="currentColor"
+                      className={`shrink-0 text-muted-foreground/40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                      aria-hidden="true"
+                    >
+                      <path d="M3 1l4 4-4 4z" />
+                    </svg>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[13px] font-medium truncate">{pkg.app_name}</span>
+                        <Badge variant={statusVariant} className="badge-compact">{statusLabel}</Badge>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/40">
+                        {pkg.screenshot_count} screenshots · {pkg.locales?.length || 0} locales · {pkg.devices?.length || 0} devices
+                      </span>
+                    </div>
+                  </button>
+                  <span className="shrink-0 text-[10px] text-muted-foreground/30">{formatDate(pkg.created_at)}</span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setDeleteId(pkg.id)}
-                    aria-label={`Delete ${pkg.app_name} export package`}
+                    className="h-6 px-2 text-[10px]"
+                    onClick={() => handleDownload(pkg)}
+                    disabled={downloadingId === pkg.id}
+                    aria-label={`Download ${pkg.app_name} as zip`}
                   >
-                    Delete
+                    {downloadingId === pkg.id ? '...' : 'Download'}
                   </Button>
+                  <button
+                    className="shrink-0 rounded p-1 text-muted-foreground/30 hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setDeleteId(pkg.id)}
+                    aria-label={`Delete ${pkg.app_name} export`}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                    </svg>
+                  </button>
                 </div>
 
-                {/* Expanded preview */}
-                {expandedId === pkg.id && (
-                  <div className="mt-2 rounded-md border p-3">
+                {/* Expanded file grid */}
+                {isExpanded && (
+                  <div className="border-t border-border/50 bg-muted/20 px-3 py-3">
                     {expandedFiles.length === 0 ? (
-                      <p className="text-sm text-muted-foreground" role="status">Loading previews...</p>
-                    ) : (
-                      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6">
-                        {expandedFiles.map((file) => (
-                          <div key={file.id} className="flex flex-col items-center gap-1">
-                            <img
-                              src={`/api/exports/${pkg.id}/files/${file.id}`}
-                              alt={`${file.locale} ${file.device} screenshot`}
-                              className="w-full rounded border object-contain"
-                              loading="lazy"
-                            />
-                            <p className="text-[10px] text-muted-foreground text-center truncate w-full">
-                              {file.locale}
-                            </p>
-                          </div>
-                        ))}
+                      <div className="flex items-center justify-center py-4">
+                        <Spinner className="h-4 w-4" aria-label="Loading previews" />
                       </div>
+                    ) : (
+                      <>
+                        <div className="mb-2 flex flex-wrap gap-1">
+                          {(pkg.locales || []).map((l) => (
+                            <span key={l} className="rounded bg-accent px-1.5 py-0.5 text-[9px] text-muted-foreground/60">{l}</span>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10">
+                          {expandedFiles.map((file) => (
+                            <div key={file.id} className="group relative">
+                              <img
+                                src={`/api/exports/${pkg.id}/files/${file.id}`}
+                                alt={`${file.locale} ${file.device}`}
+                                className="w-full rounded border border-border/30 object-contain"
+                                loading="lazy"
+                              />
+                              <span className="absolute bottom-0 left-0 right-0 truncate rounded-b bg-black/60 px-1 py-0.5 text-center text-[8px] text-white/70 opacity-0 transition-opacity group-hover:opacity-100">
+                                {file.locale}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Delete confirmation dialog */}
+      {/* Delete confirmation */}
       <Dialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Delete Export Package</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This will permanently delete this export package and all its screenshots. This action cannot be undone.
+            This will permanently delete this export and all its screenshots.
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteId(null)} aria-label="Cancel deletion">
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => handleDelete(deleteId)}
-              aria-label="Confirm delete export package"
-            >
-              Delete
-            </Button>
+            <Button variant="outline" onClick={() => setDeleteId(null)} aria-label="Cancel deletion">Cancel</Button>
+            <Button variant="destructive" onClick={() => handleDelete(deleteId)} aria-label="Confirm delete">Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -1,5 +1,10 @@
 # Spyglass — Todo
 
+## Goal
+One-click deploy to the App Store. After you build an app, Spyglass makes it easy and simple to generate every asset you need — screenshots, metadata, translations — and submit to every language and market.
+
+https://developer.apple.com/design/resources/
+
 ## Screenshot Composer
 Build canvas-based screenshot composer (background + device frame + marketing text overlay)
 Support background options: solid color, gradient, image upload

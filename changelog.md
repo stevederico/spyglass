@@ -2,6 +2,18 @@
 
 ## To-Do
 
+0.6.0
+
+  Add custom landing page
+  Force dark mode globally
+  Fix sidebar dark theme
+  Add tool-style CSS utilities
+  Add compact scrollbars
+  Update ExportsView compact design
+  Update constants app features
+  Add LandingView component
+  Update hero headline copy
+
 0.5.0
 
   Add export packages backend

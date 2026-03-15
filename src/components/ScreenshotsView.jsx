@@ -14,13 +14,10 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import Header from '@stevederico/skateboard-ui/Header';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@stevederico/skateboard-ui/shadcn/ui/card';
 import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
-import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
 import { Switch } from '@stevederico/skateboard-ui/shadcn/ui/switch';
-import { Slider } from '@stevederico/skateboard-ui/shadcn/ui/slider';
-import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
+
 import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
 import { Progress } from '@stevederico/skateboard-ui/shadcn/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@stevederico/skateboard-ui/shadcn/ui/table';
@@ -113,8 +110,11 @@ function getStatusBadge(status) {
 export default function ScreenshotsView() {
   const { selectedApp } = useApp();
   const canvasRef = useRef(null);
+  const canvasContainerRef = useRef(null);
+  const [editingLine, setEditingLine] = useState(null);
 
   // Background state
+  const [bgTab, setBgTab] = useState('fill');
   const [bgColor, setBgColor] = useState('#1a1a2e');
   const [isGradient, setIsGradient] = useState(false);
   const [gradientStart, setGradientStart] = useState('#1a1a2e');
@@ -128,7 +128,7 @@ export default function ScreenshotsView() {
   const [textLine1, setTextLine1] = useState('Track Your Fitness');
   const [textLine2, setTextLine2] = useState('Reach Your Goals');
   const [textPosition, setTextPosition] = useState('top');
-  const [fontSize, setFontSize] = useState(42);
+  const [fontSize, setFontSize] = useState(100);
   const [textColor, setTextColor] = useState('#ffffff');
   const [textShadow, setTextShadow] = useState(true);
   const [fontWeight, setFontWeight] = useState('Bold');
@@ -161,7 +161,7 @@ const [panelOpen, setPanelOpen] = useState(true);
   const { currentState: historyState, pushState, undo, redo, canUndo, canRedo } = useHistory({
     bgColor: '#1a1a2e', isGradient: false, gradientStart: '#1a1a2e', gradientEnd: '#16213e',
     gradientDirection: 'top-bottom', textLine1: 'Track Your Fitness', textLine2: 'Reach Your Goals',
-    textPosition: 'top', fontSize: 42, textColor: '#ffffff', textShadow: true, fontWeight: 'Bold',
+    textPosition: 'top', fontSize: 100, textColor: '#ffffff', textShadow: true, fontWeight: 'Bold',
     autoFitText: true, device: 'iphone-67', showBezel: true, selectedFont: ''
   });
 
@@ -328,6 +328,122 @@ const [panelOpen, setPanelOpen] = useState(true);
     } catch {
       toast.error('Failed to load screenshot');
     }
+  }
+
+  /**
+   * Handle click on canvas to enable inline text editing.
+   * Maps click position from displayed CSS pixels to canvas coordinates,
+   * determines if the click falls in the text area, and activates editing.
+   *
+   * @param {MouseEvent} e - Click event on the canvas element
+   */
+  function handleCanvasClick(e) {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const cx = (e.clientX - rect.left) * scaleX;
+    const cy = (e.clientY - rect.top) * scaleY;
+
+    const deviceInfo = DEVICES[device];
+    const { width: cw, height: ch } = deviceInfo;
+    const padding = ch * 0.12;
+    const textAreaHeight = ch * 0.15;
+    const isTop = textPosition === 'top';
+    const scaledFontSize = fontSize * (cw / 1290);
+
+    // Compute baseline Y for each line (matches drawComposite exactly)
+    let baseY1;
+    if (isTop) {
+      baseY1 = padding * 0.6;
+    } else {
+      const frameY = padding * 0.5;
+      const availableHeight = ch - textAreaHeight - padding;
+      const screenScale = Math.min((cw * 0.85) / deviceInfo.width, availableHeight / deviceInfo.height);
+      const frameH = deviceInfo.height * screenScale;
+      baseY1 = frameY + frameH + padding * 0.5;
+    }
+    const baseY2 = baseY1 + scaledFontSize * 1.4;
+
+    // Convert baseline to top-edge hit zones (ascender ~0.8, line height ~1.3)
+    const line1Top = baseY1 - scaledFontSize * 0.8;
+    const line1Bottom = baseY1 + scaledFontSize * 0.5;
+    const line2Top = baseY2 - scaledFontSize * 0.75 * 0.8;
+    const line2Bottom = baseY2 + scaledFontSize * 0.75 * 0.5;
+
+    if (cy >= line1Top && cy <= line1Bottom) {
+      setEditingLine(1);
+      return;
+    }
+    if (cy >= line2Top && cy <= line2Bottom) {
+      setEditingLine(2);
+      return;
+    }
+    setEditingLine(null);
+  }
+
+  /**
+   * Compute the CSS position and style for the inline text overlay input.
+   * Maps canvas text coordinates to the displayed element coordinates.
+   *
+   * @param {1|2} lineNum - Which text line (1 or 2)
+   * @returns {{ top: string, left: string, width: string, fontSize: string, textAlign: string }}
+   */
+  function getTextOverlayStyle(lineNum) {
+    const canvas = canvasRef.current;
+    if (!canvas) return {};
+
+    const rect = canvas.getBoundingClientRect();
+    const deviceInfo = DEVICES[device];
+    const { width: cw, height: ch } = deviceInfo;
+    const displayScale = rect.width / cw;
+    const padding = ch * 0.12;
+    const textAreaHeight = ch * 0.15;
+    const isTop = textPosition === 'top';
+    const scaledFontSize = fontSize * (cw / 1290);
+    const lineFontSize = lineNum === 1 ? scaledFontSize : scaledFontSize * 0.75;
+
+    // yCanvas = alphabetic baseline in canvas coords (matches fillText Y)
+    let yCanvas;
+    if (isTop) {
+      yCanvas = lineNum === 1 ? padding * 0.6 : padding * 0.6 + scaledFontSize * 1.4;
+    } else {
+      const frameY = padding * 0.5;
+      const availableHeight = ch - textAreaHeight - padding;
+      const screenScale = Math.min((cw * 0.85) / deviceInfo.width, availableHeight / deviceInfo.height);
+      const frameH = deviceInfo.height * screenScale;
+      const textY1 = frameY + frameH + padding * 0.5;
+      yCanvas = lineNum === 1 ? textY1 : textY1 + scaledFontSize * 1.4;
+    }
+
+    // Convert baseline Y to top-edge Y (ascender offset ~0.8 of font size)
+    const topCanvas = yCanvas - lineFontSize * 0.8;
+    const displayFontSize = Math.max(12, lineFontSize * displayScale);
+    const fontFamilyValue = selectedFont || 'system-ui, -apple-system, sans-serif';
+
+    return {
+      position: 'absolute',
+      top: `${topCanvas * displayScale}px`,
+      left: '10%',
+      width: '80%',
+      height: `${lineFontSize * 1.3 * displayScale}px`,
+      fontSize: `${displayFontSize}px`,
+      fontWeight: FONT_WEIGHTS[fontWeight] || '700',
+      fontFamily: fontFamilyValue,
+      lineHeight: '1.2',
+      color: textColor,
+      textAlign: 'center',
+      background: 'transparent',
+      border: 'none',
+      outline: '2px solid rgba(59, 130, 246, 0.5)',
+      borderRadius: '4px',
+      padding: '0 4px',
+      margin: 0,
+      boxSizing: 'border-box',
+      caretColor: textColor,
+    };
   }
 
   /** Export the canvas as a PNG download */
@@ -514,13 +630,13 @@ const [panelOpen, setPanelOpen] = useState(true);
       device, showBezel, screenshotImage,
       textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
       bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-      autoFitText, fontFamily: selectedFont
+      autoFitText, fontFamily: selectedFont, editingLine
     });
   }, [
     device, showBezel, screenshotImage,
     textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
     bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-    autoFitText, selectedFont, previewLocale, translations
+    autoFitText, selectedFont, previewLocale, translations, editingLine
   ]);
 
 
@@ -548,12 +664,40 @@ const [panelOpen, setPanelOpen] = useState(true);
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Canvas Preview */}
         <section className="flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 md:p-6" aria-label="Screenshot preview">
-            <div className={`w-full rounded-lg border border-border p-4 bg-accent/30 transition-all duration-300 ease-in-out ${panelOpen ? 'max-w-lg' : 'max-w-xl'}`}>
+            <div
+              ref={canvasContainerRef}
+              className={`relative w-full cursor-text transition-all duration-300 ease-in-out ${panelOpen ? 'max-w-lg' : 'max-w-xl'}`}
+            >
               <canvas
                 ref={canvasRef}
+                onClick={handleCanvasClick}
                 style={{ width: '100%', height: 'auto', borderRadius: '8px' }}
                 aria-label="Composed screenshot preview"
               />
+              {editingLine === 1 && (
+                <input
+                  type="text"
+                  value={textLine1}
+                  onChange={(e) => setTextLine1(e.target.value)}
+                  onBlur={() => setEditingLine(null)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setEditingLine(null); if (e.key === 'Tab') { e.preventDefault(); setEditingLine(2); } }}
+                  style={getTextOverlayStyle(1)}
+                  autoFocus
+                  aria-label="Edit marketing text line 1"
+                />
+              )}
+              {editingLine === 2 && (
+                <input
+                  type="text"
+                  value={textLine2}
+                  onChange={(e) => setTextLine2(e.target.value)}
+                  onBlur={() => setEditingLine(null)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setEditingLine(null); if (e.key === 'Tab') { e.preventDefault(); setEditingLine(1); } }}
+                  style={getTextOverlayStyle(2)}
+                  autoFocus
+                  aria-label="Edit marketing text line 2"
+                />
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               {currentDevice.width} &times; {currentDevice.height}px &mdash; {currentDevice.label}
@@ -598,96 +742,116 @@ const [panelOpen, setPanelOpen] = useState(true);
             <div className="border-b border-border/40 px-3 py-2.5">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Background</h3>
               <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Fill</span>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="color"
-                      id="bg-color"
-                      value={bgColor}
-                      onChange={(e) => setBgColor(e.target.value)}
-                      className="h-6 w-6 cursor-pointer rounded border border-border/60 p-0"
-                      aria-label="Background color"
-                    />
-                    <span className="font-mono text-[10px] text-muted-foreground/60">{bgColor}</span>
-                  </div>
+                {/* Segment control */}
+                <div className="flex rounded-md border border-border/50 p-0.5" role="tablist" aria-label="Background type">
+                  {[{ id: 'fill', label: 'Fill' }, { id: 'upload', label: 'Image' }, { id: 'generate', label: 'AI' }].map((tab) => (
+                    <button
+                      key={tab.id}
+                      role="tab"
+                      aria-selected={bgTab === tab.id}
+                      onClick={() => setBgTab(tab.id)}
+                      className={`flex-1 rounded px-2 py-1 text-xs transition-colors ${bgTab === tab.id ? 'bg-accent text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Gradient</span>
-                  <Switch
-                    id="gradient-toggle"
-                    checked={isGradient}
-                    onCheckedChange={setIsGradient}
-                    aria-label="Toggle gradient background"
-                    className="scale-75"
-                  />
-                </div>
-                {isGradient && (
-                  <div className="flex flex-col gap-1.5 border-l-2 border-border/30 pl-2.5">
+
+                {/* Fill tab */}
+                {bgTab === 'fill' && (
+                  <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-muted-foreground/60">Start</span>
+                      <span className="text-xs text-muted-foreground">Color</span>
                       <div className="flex items-center gap-1.5">
-                        <input type="color" id="grad-start" value={gradientStart} onChange={(e) => setGradientStart(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient start color" />
-                        <span className="font-mono text-[10px] text-muted-foreground/60">{gradientStart}</span>
+                        <input type="color" id="bg-color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="h-6 w-6 cursor-pointer rounded border border-border/60 p-0" aria-label="Background color" />
+                        <span className="font-mono text-[11px] text-muted-foreground/70">{bgColor}</span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-muted-foreground/60">End</span>
-                      <div className="flex items-center gap-1.5">
-                        <input type="color" id="grad-end" value={gradientEnd} onChange={(e) => setGradientEnd(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient end color" />
-                        <span className="font-mono text-[10px] text-muted-foreground/60">{gradientEnd}</span>
-                      </div>
+                      <span className="text-xs text-muted-foreground">Gradient</span>
+                      <Switch id="gradient-toggle" checked={isGradient} onCheckedChange={setIsGradient} aria-label="Toggle gradient background" className="scale-75" />
                     </div>
-                    <Select value={gradientDirection} onValueChange={setGradientDirection}>
-                      <SelectTrigger id="grad-direction" className="h-7 text-xs" aria-label="Gradient direction">
-                        <SelectValue>{GRADIENT_DIRECTIONS.find((d) => d.value === gradientDirection)?.label || 'Top to Bottom'}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {GRADIENT_DIRECTIONS.map((d) => (
-                          <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {isGradient && (
+                      <div className="flex flex-col gap-1.5 border-l-2 border-border/30 pl-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Start</span>
+                          <div className="flex items-center gap-1.5">
+                            <input type="color" id="grad-start" value={gradientStart} onChange={(e) => setGradientStart(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient start color" />
+                            <span className="font-mono text-[11px] text-muted-foreground/70">{gradientStart}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">End</span>
+                          <div className="flex items-center gap-1.5">
+                            <input type="color" id="grad-end" value={gradientEnd} onChange={(e) => setGradientEnd(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient end color" />
+                            <span className="font-mono text-[11px] text-muted-foreground/70">{gradientEnd}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">Direction</span>
+                          <Select value={gradientDirection} onValueChange={setGradientDirection}>
+                            <SelectTrigger id="grad-direction" className="h-7 w-32 border-0 bg-transparent text-xs shadow-none" aria-label="Gradient direction">
+                              <SelectValue>{GRADIENT_DIRECTIONS.find((d) => d.value === gradientDirection)?.label || 'Top to Bottom'}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              {GRADIENT_DIRECTIONS.map((d) => (
+                                <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
-                <div className="flex items-center gap-1.5">
-                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => document.getElementById('bg-upload').click()} aria-label="Upload background image">
-                    {bgImage ? 'Replace Image' : 'Upload Image'}
-                  </Button>
-                  {bgImage && (
-                    <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => setBgImage(null)} aria-label="Remove background image">
-                      Remove
-                    </Button>
-                  )}
-                </div>
+
+                {/* Image tab */}
+                {bgTab === 'upload' && (
+                  <div className="flex flex-col gap-2">
+                    <div
+                      className="flex min-h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed border-border/60 bg-accent/10 p-3 transition-colors hover:bg-accent/30"
+                      onClick={() => document.getElementById('bg-upload').click()}
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Upload background image"
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); document.getElementById('bg-upload').click(); } }}
+                    >
+                      {bgImage ? (
+                        <p className="text-xs text-foreground">Image loaded — click to replace</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Click to upload image</p>
+                      )}
+                    </div>
+                    {bgImage && (
+                      <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => setBgImage(null)} aria-label="Remove background image">
+                        Remove Image
+                      </Button>
+                    )}
+                  </div>
+                )}
                 <input type="file" id="bg-upload" accept="image/*" onChange={handleBgUpload} className="hidden" aria-label="Background image file input" />
-                <div className="flex items-center gap-1.5">
-                  <Input
-                    id="ai-bg-prompt"
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder="AI background prompt..."
-                    disabled={isGeneratingBg}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleGenerateBg(); }}
-                    aria-label="AI background description"
-                    className="h-7 text-xs"
-                  />
-                  <Button variant="outline" size="sm" className="h-7 shrink-0 text-xs" onClick={handleGenerateBg} disabled={isGeneratingBg || !aiPrompt.trim()} aria-label="Generate AI background">
-                    {isGeneratingBg ? <Spinner className="h-3 w-3" /> : 'AI'}
-                  </Button>
-                </div>
+
+                {/* AI tab */}
+                {bgTab === 'generate' && (
+                  <div className="flex flex-col gap-1.5">
+                    <Input id="ai-bg-prompt" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Describe a background..." disabled={isGeneratingBg} onKeyDown={(e) => { if (e.key === 'Enter') handleGenerateBg(); }} aria-label="AI background description" className="h-7 text-xs" />
+                    <Button size="sm" className="h-7 text-xs" onClick={handleGenerateBg} disabled={isGeneratingBg || !aiPrompt.trim()} aria-label="Generate AI background">
+                      {isGeneratingBg ? <Spinner className="h-3 w-3" /> : 'Generate Background'}
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* ── TEXT ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Text</h3>
+              <p className="mb-2 text-xs text-muted-foreground/50">Click text on canvas to edit</p>
               <div className="flex flex-col gap-2">
-                <Input id="text-line1" value={textLine1} onChange={(e) => setTextLine1(e.target.value)} placeholder="Headline" aria-label="Marketing text line 1" className="h-7 text-xs" />
-                <Input id="text-line2" value={textLine2} onChange={(e) => setTextLine2(e.target.value)} placeholder="Subheadline" aria-label="Marketing text line 2" className="h-7 text-xs" />
-                <div className="grid grid-cols-2 gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Position</span>
                   <Select value={textPosition} onValueChange={setTextPosition}>
-                    <SelectTrigger id="text-position" className="h-7 text-xs" aria-label="Text position">
+                    <SelectTrigger id="text-position" className="h-7 w-24 border-0 bg-transparent text-xs shadow-none" aria-label="Text position">
                       <SelectValue>{textPosition === 'top' ? 'Top' : 'Bottom'}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -695,8 +859,11 @@ const [panelOpen, setPanelOpen] = useState(true);
                       <SelectItem value="bottom">Bottom</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Weight</span>
                   <Select value={fontWeight} onValueChange={setFontWeight}>
-                    <SelectTrigger id="font-weight" className="h-7 text-xs" aria-label="Font weight">
+                    <SelectTrigger id="font-weight" className="h-7 w-24 border-0 bg-transparent text-xs shadow-none" aria-label="Font weight">
                       <SelectValue>{fontWeight}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
@@ -706,20 +873,20 @@ const [panelOpen, setPanelOpen] = useState(true);
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="shrink-0 text-[11px] text-muted-foreground/60">{fontSize}px</span>
-                  <Slider id="font-size" min={24} max={72} step={1} value={[fontSize]} onValueChange={(val) => setFontSize(val[0])} aria-label="Font size slider" className="flex-1" />
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Size</span>
+                  <Input id="font-size-input" type="number" min={12} max={120} value={fontSize} onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v >= 12 && v <= 120) setFontSize(v); }} aria-label="Font size in pixels" className="h-7 w-16 border-0 bg-transparent text-xs text-right tabular-nums shadow-none" />
                 </div>
                 <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Color</span>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-muted-foreground">Color</span>
                     <input type="color" id="text-color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Text color" />
-                    <span className="font-mono text-[10px] text-muted-foreground/60">{textColor}</span>
+                    <span className="font-mono text-[11px] text-muted-foreground/70">{textColor}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] text-muted-foreground/60">Shadow</span>
-                    <Switch id="text-shadow-toggle" checked={textShadow} onCheckedChange={setTextShadow} aria-label="Toggle text shadow" className="scale-75" />
-                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Shadow</span>
+                  <Switch id="text-shadow-toggle" checked={textShadow} onCheckedChange={setTextShadow} aria-label="Toggle text shadow" className="scale-75" />
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Auto-fit</span>
@@ -766,11 +933,11 @@ const [panelOpen, setPanelOpen] = useState(true);
                   }}
                 >
                   {screenshotImage ? (
-                    <p className="text-[11px] text-foreground">Screenshot loaded — click to replace</p>
+                    <p className="text-xs text-foreground">Screenshot loaded — click to replace</p>
                   ) : (
                     <>
-                      <p className="text-[11px] font-medium text-muted-foreground">Drop screenshot here</p>
-                      <p className="text-[10px] text-muted-foreground/60">or click to browse</p>
+                      <p className="text-xs font-medium text-muted-foreground">Drop screenshot here</p>
+                      <p className="text-xs text-muted-foreground/60">or click to browse</p>
                     </>
                   )}
                 </div>
@@ -788,13 +955,13 @@ const [panelOpen, setPanelOpen] = useState(true);
                   </Button>
                   {hasTranslations && (
                     <>
-                      <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => setShowTranslations(!showTranslations)} aria-label={showTranslations ? 'Hide translations table' : 'Show translations table'}>
+                      <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setShowTranslations(!showTranslations)} aria-label={showTranslations ? 'Hide translations table' : 'Show translations table'}>
                         {showTranslations ? 'Hide' : 'Show'} ({Object.keys(translations).length})
                       </Button>
-                      <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleCopyAll} disabled={isTranslating} aria-label="Copy all translations as JSON">
+                      <Button variant="outline" size="sm" className="h-6 text-xs" onClick={handleCopyAll} disabled={isTranslating} aria-label="Copy all translations as JSON">
                         Copy
                       </Button>
-                      <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleExportTranslated} disabled={isTranslating} aria-label="Export all translated screenshots as PNGs">
+                      <Button variant="outline" size="sm" className="h-6 text-xs" onClick={handleExportTranslated} disabled={isTranslating} aria-label="Export all translated screenshots as PNGs">
                         Export
                       </Button>
                     </>
@@ -842,10 +1009,10 @@ const [panelOpen, setPanelOpen] = useState(true);
                             <TableRow key={locale.code}>
                               <TableCell className="text-[10px] font-medium">{locale.name}</TableCell>
                               <TableCell>
-                                <Input value={t.line1} onChange={(e) => handleCellEdit(locale.code, 'line1', e.target.value)} disabled={isTranslating} aria-label={`${locale.name} line 1 translation`} className="h-6 text-[10px]" />
+                                <Input value={t.line1} onChange={(e) => handleCellEdit(locale.code, 'line1', e.target.value)} disabled={isTranslating} aria-label={`${locale.name} line 1 translation`} className="h-6 text-xs" />
                               </TableCell>
                               <TableCell>
-                                <Input value={t.line2} onChange={(e) => handleCellEdit(locale.code, 'line2', e.target.value)} disabled={isTranslating} aria-label={`${locale.name} line 2 translation`} className="h-6 text-[10px]" />
+                                <Input value={t.line2} onChange={(e) => handleCellEdit(locale.code, 'line2', e.target.value)} disabled={isTranslating} aria-label={`${locale.name} line 2 translation`} className="h-6 text-xs" />
                               </TableCell>
                               <TableCell>
                                 <Badge variant={variant} className="text-[9px]">{label}</Badge>

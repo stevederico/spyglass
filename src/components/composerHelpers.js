@@ -313,6 +313,7 @@ export function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, ha
  * @param {HTMLImageElement|null} state.bgImage - Background image element
  * @param {boolean} [state.autoFitText=true] - Whether to auto-shrink text to fit
  * @param {string} [state.fontFamily] - Optional custom font family name
+ * @param {number} [state.editingLine] - Line number being inline-edited (1 or 2); skipped during draw
  */
 export function drawComposite(canvas, state) {
   const ctx = canvas.getContext('2d');
@@ -369,14 +370,18 @@ export function drawComposite(canvas, state) {
 
   if (isTop) {
     const textY1 = padding * 0.6;
-    drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
-    if (state.textLine2) {
+    if (state.editingLine !== 1) {
+      drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
+    }
+    if (state.textLine2 && state.editingLine !== 2) {
       drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
   } else {
     const textY1 = frameY + frameH + padding * 0.5;
-    drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
-    if (state.textLine2) {
+    if (state.editingLine !== 1) {
+      drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
+    }
+    if (state.textLine2 && state.editingLine !== 2) {
       drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
   }
