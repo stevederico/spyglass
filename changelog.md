@@ -1,6 +1,15 @@
 ## CHANGELOG
 
 ## To-Do
+- ASO keyword tool
+
+0.7.1
+
+  Add ASO keyword to-do
+  Fix Select dropdown labels
+  Fix panel background theme
+  Fix sidebar dark background
+  Update CLAUDE.md Select rules
 
 0.7.0
 

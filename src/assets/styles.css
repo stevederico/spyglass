@@ -84,7 +84,7 @@
 
 /* ── Panel styling ── */
 .tool-panel {
-  background: hsl(var(--card));
+  background: var(--color-background);
   border-left: 1px solid hsl(var(--border));
   overflow-y: auto;
 }
@@ -109,7 +109,14 @@ button,
 
 /* ── Main content area dark bg ── */
 main {
-  background: hsl(var(--background));
+  background: var(--color-background);
+  border-color: hsl(var(--border)) !important;
+}
+
+/* ── Match sidebar wrapper and sidebar to unified dark bg ── */
+.dark .group\/sidebar-wrapper,
+.dark [data-sidebar="sidebar"] {
+  background: var(--color-background) !important;
 }
 
 /* ── Scrollbar styling ── */

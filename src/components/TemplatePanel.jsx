@@ -30,6 +30,7 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [templateSelectKey, setTemplateSelectKey] = useState(0);
   const fontInputRef = useRef(null);
   const seededRef = useRef(new Set());
 
@@ -151,6 +152,7 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
     if (template?.settings) {
       onLoadTemplate(template.settings);
     }
+    setTemplateSelectKey((k) => k + 1);
   }
 
   /**
@@ -194,7 +196,7 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
       <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Templates</h3>
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-1.5">
-          <Select onValueChange={handleSelectTemplate}>
+          <Select key={templateSelectKey} onValueChange={handleSelectTemplate}>
             <SelectTrigger className="h-7 flex-1 text-xs" aria-label="Select a template to load">
               <SelectValue placeholder="Load template..." />
             </SelectTrigger>

@@ -158,6 +158,7 @@ Apps own their `vite.config.js` directly. See [reference implementation](https:/
 - Compose views from these primitives — don't reinvent patterns they already solve
 - Check available components before building custom UI; if shadcn has it, use it
 - Combine with Tailwind utility classes for layout and spacing
+- **Select dropdowns must never show raw IDs.** Every `<SelectValue>` must have explicit children that map the internal value to a human-readable label. Never rely on `placeholder` alone — after selection, radix renders the selected item's value if children are absent. For fire-and-forget selects (no `value` prop), reset via a `key` prop after selection to return to the placeholder.
 
 **Example:**
 ```javascript
