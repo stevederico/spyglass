@@ -307,7 +307,7 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
                           drawComposite(el, {
                             ...slot,
                             fontFamily: slot.selectedFont || slot.fontFamily || '',
-                            frameModelInfo: slot.frameModel ? null : null,
+                            frameModelInfo: slot.frameModel ? slot.frameModelInfo : null,
                           });
                         }}
                         className="rounded border border-border/50"

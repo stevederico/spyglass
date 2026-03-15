@@ -6,8 +6,7 @@
 import { Hono } from 'hono';
 import { DatabaseSync as Database } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs';
-import { promisify } from 'node:util';
+import { mkdirSync } from 'node:fs';
 
 const app = new Hono();
 
@@ -26,7 +25,7 @@ function getDb() {
   if (db) return db;
 
   try {
-    promisify(mkdir)('./databases', { recursive: true }).catch(() => {});
+    mkdirSync('./databases', { recursive: true });
   } catch {
     // directory may already exist
   }

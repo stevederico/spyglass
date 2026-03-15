@@ -203,6 +203,8 @@ export default function ScreenshotsView() {
   const [isGeneratingBg, setIsGeneratingBg] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationProgress, setTranslationProgress] = useState(0);
+  const [translationStatus, setTranslationStatus] = useState('');
+  const [translationQuota, setTranslationQuota] = useState(null);
   const [showTranslations, setShowTranslations] = useState(false);
   const [selectedLocales, setSelectedLocales] = useState(() => new Set(LOCALES.filter((l) => !ENGLISH_LOCALES.has(l.code)).map((l) => l.code)));
 
@@ -216,9 +218,8 @@ export default function ScreenshotsView() {
   }
 
   // QoL state
-  const [showPreviewAll, setShowPreviewAll] = useState(false);
   const [showPreviewLocales, setShowPreviewLocales] = useState(false);
-const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(true);
   const [collapsedSections, setCollapsedSections] = useState({});
   const toggleSection = (key) => setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
@@ -252,6 +253,11 @@ const [panelOpen, setPanelOpen] = useState(true);
 
   // Ref to latest canvas draw function — called after async font loads
   const redrawRef = useRef(null);
+
+  // Fetch translation quota on mount
+  useEffect(() => {
+    apiRequest('/translate/quota').then(setTranslationQuota).catch(() => {});
+  }, []);
 
   // Load Google Font stylesheet when selectedFont changes, redraw when ready
   useEffect(() => {
@@ -654,6 +660,7 @@ const [panelOpen, setPanelOpen] = useState(true);
 
     setIsTranslating(true);
     setTranslationProgress(0);
+    setTranslationStatus('Preparing…');
     setShowTranslations(true);
 
     const newTranslations = { ...translations };
@@ -666,22 +673,32 @@ const [panelOpen, setPanelOpen] = useState(true);
     }
 
     const toTranslate = LOCALES.filter((l) => selectedLocales.has(l.code) && !ENGLISH_LOCALES.has(l.code));
+    const uniqueLangCount = new Set(toTranslate.map((l) => l.code.split('-')[0])).size;
 
     // Mark selected non-English locales as "translating"
     for (const locale of toTranslate) {
       newTranslations[locale.code] = { line1: '', line2: '', status: 'translating' };
     }
     setTranslations({ ...newTranslations });
+    setTranslationStatus(`Translating ${toTranslate.length} locales (${uniqueLangCount} languages)… this may take a minute`);
+    setTranslationProgress(10);
 
     // Single batch API call translates all locales at once
     try {
       const response = await apiRequest('/translate/batch', {
         method: 'POST',
+        timeout: 5 * 60 * 1000, // 5 min — backend translates sequentially with rate-limit delays
         body: JSON.stringify({
           texts: [textLine1, textLine2],
-          source: 'en'
+          source: 'en',
+          locales: toTranslate.map((l) => l.code)
         })
       });
+
+      setTranslationStatus('Processing results…');
+      setTranslationProgress(90);
+
+      if (response?.quota) setTranslationQuota(response.quota);
 
       if (response?.translations) {
         for (const locale of toTranslate) {
@@ -693,26 +710,36 @@ const [panelOpen, setPanelOpen] = useState(true);
               status: 'translated'
             };
           } else if (localeTranslation?.error) {
-            newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
+            newTranslations[locale.code] = { line1: '', line2: '', status: 'error', errorMessage: localeTranslation.error };
           } else {
-            newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
+            newTranslations[locale.code] = { line1: '', line2: '', status: 'error', errorMessage: 'No translation returned' };
           }
         }
       } else {
         for (const locale of toTranslate) {
-          newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
+          newTranslations[locale.code] = { line1: '', line2: '', status: 'error', errorMessage: 'Translation service unavailable' };
         }
       }
-    } catch {
+    } catch (err) {
       for (const locale of toTranslate) {
-        newTranslations[locale.code] = { line1: '', line2: '', status: 'error' };
+        newTranslations[locale.code] = { line1: '', line2: '', status: 'error', errorMessage: err?.message || 'Network error' };
       }
     }
 
     setTranslations({ ...newTranslations });
     setIsTranslating(false);
     setTranslationProgress(100);
-    toast.success(`Translated ${toTranslate.length} languages`);
+    setTranslationStatus('');
+
+    const successCount = toTranslate.filter((l) => newTranslations[l.code]?.status === 'translated').length;
+    const errorCount = toTranslate.length - successCount;
+    if (errorCount === 0) {
+      toast.success(`Translated ${successCount} languages`);
+    } else if (successCount > 0) {
+      toast.warning(`Translated ${successCount} languages, ${errorCount} failed — translation service may be rate-limited`);
+    } else {
+      toast.error('Translation failed — service may be temporarily unavailable. Try again in a few minutes.');
+    }
   }, [textLine1, textLine2, selectedLocales, translations]);
 
   /**
@@ -1042,7 +1069,7 @@ const [panelOpen, setPanelOpen] = useState(true);
           <div className="flex-1 overflow-y-auto min-h-0">
             {/* ── BACKGROUND ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <button onClick={() => toggleSection('bg')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.bg} aria-controls="section-bg">
+              <button onClick={() => toggleSection('bg')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.bg} aria-controls="section-bg" aria-label="Toggle Background section">
                 <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Background</h3>
                 <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.bg ? '-rotate-90' : ''}`} aria-hidden="true" />
               </button>
@@ -1150,7 +1177,7 @@ const [panelOpen, setPanelOpen] = useState(true);
 
             {/* ── TEXT ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <button onClick={() => toggleSection('text')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.text} aria-controls="section-text">
+              <button onClick={() => toggleSection('text')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.text} aria-controls="section-text" aria-label="Toggle Text section">
                 <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Text</h3>
                 <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.text ? '-rotate-90' : ''}`} aria-hidden="true" />
               </button>
@@ -1218,7 +1245,7 @@ const [panelOpen, setPanelOpen] = useState(true);
 
             {/* ── DEVICE ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <button onClick={() => toggleSection('device')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.device} aria-controls="section-device">
+              <button onClick={() => toggleSection('device')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.device} aria-controls="section-device" aria-label="Toggle Device section">
                 <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Device</h3>
                 <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.device ? '-rotate-90' : ''}`} aria-hidden="true" />
               </button>
@@ -1307,7 +1334,7 @@ const [panelOpen, setPanelOpen] = useState(true);
 
             {/* ── LOCALIZATION ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <button onClick={() => toggleSection('localization')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.localization} aria-controls="section-localization">
+              <button onClick={() => toggleSection('localization')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.localization} aria-controls="section-localization" aria-label="Toggle Localization section">
                 <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Localization</h3>
                 <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.localization ? '-rotate-90' : ''}`} aria-hidden="true" />
               </button>
@@ -1324,9 +1351,23 @@ const [panelOpen, setPanelOpen] = useState(true);
                 </div>
 
                 {isTranslating && (
-                  <div className="flex flex-col gap-1" role="status" aria-live="polite">
+                  <div className="flex flex-col gap-1.5" role="status" aria-live="polite">
+                    <div className="flex items-center gap-2">
+                      <Spinner className="h-3 w-3" />
+                      <p className="text-[10px] text-muted-foreground">{translationStatus}</p>
+                    </div>
                     <Progress value={translationProgress} aria-label="Translation progress" className="h-1.5" />
-                    <p className="text-[10px] text-muted-foreground">{translationProgress}%</p>
+                  </div>
+                )}
+
+                {translationQuota && (
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-muted-foreground">
+                      {translationQuota.charsRemaining.toLocaleString()} / {translationQuota.limit.toLocaleString()} chars remaining
+                    </p>
+                    {translationQuota.exhausted && (
+                      <Badge variant="destructive" className="text-[8px] px-1 py-0">Quota reached</Badge>
+                    )}
                   </div>
                 )}
 
@@ -1357,7 +1398,22 @@ const [panelOpen, setPanelOpen] = useState(true);
                             <span className="text-[11px]">{locale.name}</span>
                           </div>
                           {status !== 'waiting' && (
-                            <Badge variant={variant} className="text-[8px] px-1 py-0">{label}</Badge>
+                            status === 'error' ? (
+                              <Badge
+                                variant={variant}
+                                className="text-[8px] px-1 py-0 cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toast.error(t?.errorMessage || 'Unknown error', { duration: 8000 });
+                                }}
+                                role="button"
+                                aria-label={`View error for ${locale.name}`}
+                              >
+                                {label}
+                              </Badge>
+                            ) : (
+                              <Badge variant={variant} className="text-[8px] px-1 py-0">{label}</Badge>
+                            )
                           )}
                         </button>
                       );
@@ -1369,7 +1425,7 @@ const [panelOpen, setPanelOpen] = useState(true);
 
             {/* ── LAYERS ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <button onClick={() => toggleSection('layers')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.layers} aria-controls="section-layers">
+              <button onClick={() => toggleSection('layers')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.layers} aria-controls="section-layers" aria-label="Toggle Layers section">
                 <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Layers</h3>
                 <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.layers ? '-rotate-90' : ''}`} aria-hidden="true" />
               </button>
@@ -1439,61 +1495,6 @@ const [panelOpen, setPanelOpen] = useState(true);
           </aside>
       </div>
       )}
-
-      {/* Preview All Sizes Dialog */}
-      <Dialog open={showPreviewAll} onOpenChange={setShowPreviewAll}>
-        <DialogContent className="!max-w-[calc(100vw-2rem)] w-full h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
-          <DialogHeader className="shrink-0">
-            <DialogTitle>Preview All Sizes</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 grid grid-cols-4 grid-rows-2 gap-4 min-h-0">
-            {filteredDeviceOptions.map((d) => {
-              const dev = DEVICES[d.key];
-              return (
-                <div key={d.key} className="flex flex-col items-center gap-1 min-h-0 overflow-hidden">
-                  <canvas
-                    ref={(el) => {
-                      if (!el || !showPreviewAll) return;
-                      const previewLine1 = !ENGLISH_LOCALES.has(previewLocale) && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
-                      const previewLine2 = !ENGLISH_LOCALES.has(previewLocale) && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
-
-                      // Find matching frame model for this device tier
-                      const matchingEntry = Object.entries(FRAME_MODELS).find(([, m]) => m.ascTier === d.key);
-                      const baseState = {
-                        device: d.key, showBezel, screenshotImage,
-                        textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
-                        bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-                        autoFitText, fontFamily: selectedFont,
-                        frameLayout, orientation
-                      };
-
-                      if (matchingEntry) {
-                        const [modelKey, modelInfo] = matchingEntry;
-                        loadFrame(modelKey, modelInfo.defaultColor, orientation)
-                          .then((img) => {
-                            drawComposite(el, { ...baseState, frameImage: img, frameModelInfo: modelInfo });
-                          })
-                          .catch(() => {
-                            drawComposite(el, { ...baseState, frameImage: null, frameModelInfo: null });
-                          });
-                      } else {
-                        drawComposite(el, { ...baseState, frameImage: null, frameModelInfo: null });
-                      }
-                    }}
-                    style={{ width: 'auto', maxWidth: '100%', maxHeight: '100%', borderRadius: '4px' }}
-                    aria-label={`Preview for ${d.label}`}
-                  />
-                  <p className="shrink-0 text-xs text-muted-foreground text-center">
-                    {d.label}
-                    <br />
-                    {orientation === 'landscape' ? dev.height : dev.width}x{orientation === 'landscape' ? dev.width : dev.height}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* Preview All Locales Dialog */}
       <Dialog open={showPreviewLocales} onOpenChange={setShowPreviewLocales}>

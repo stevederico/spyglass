@@ -593,7 +593,7 @@ app.use('*', async (c, next) => {
   const status = c.res.status;
   const duration = Date.now() - start;
 
-  console.log(`[${timestamp}] "${method} ${url}" ${status} (${duration}ms)`);
+  if (!isProd()) console.log(`[${timestamp}] "${method} ${url}" ${status} (${duration}ms)`);
 });
 
 // Security headers middleware
@@ -622,7 +622,7 @@ app.use('*', secureHeaders({
 // Request logging middleware (dev only)
 app.use('*', async (c, next) => {
   if (!isProd()) {
-    const requestId = Math.random().toString(36).substr(2, 9);
+    const requestId = crypto.randomUUID();
     logger.debug('Request received', { method: c.req.method, path: c.req.path, requestId });
   }
   await next();
@@ -1442,7 +1442,7 @@ app.get('*', async (c) => {
 
 // ==== ERROR HANDLER ====
 app.onError((err, c) => {
-  const requestId = Math.random().toString(36).substr(2, 9);
+  const requestId = crypto.randomUUID();
 
   logger.error('Unhandled error occurred', {
     message: err.message,

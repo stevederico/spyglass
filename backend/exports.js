@@ -165,6 +165,9 @@ app.post('/exports', async (c) => {
 
       if (!fileLocale || !fileDevice) continue;
 
+      // Validate locale and device names to prevent path traversal
+      if (!/^[a-zA-Z0-9_-]+$/.test(fileLocale) || !/^[a-zA-Z0-9_-]+$/.test(fileDevice)) continue;
+
       const localeDir = join(packageDir, fileLocale);
       if (!existsSync(localeDir)) {
         mkdirSync(localeDir, { recursive: true });

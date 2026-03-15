@@ -197,7 +197,7 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
 
   return (
     <div className="px-3 py-2.5">
-      <button onClick={() => setCollapsed((v) => !v)} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsed} aria-controls="section-templates">
+      <button onClick={() => setCollapsed((v) => !v)} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsed} aria-controls="section-templates" aria-label="Toggle Templates section">
         <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Templates</h3>
         <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsed ? '-rotate-90' : ''}`} aria-hidden="true" />
       </button>

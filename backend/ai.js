@@ -65,11 +65,12 @@ const app = new Hono();
 async function callGrok(systemPrompt, userPrompt) {
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) {
-    throw new Error('XAI_API_KEY environment variable is not set');
+    throw new Error('AI features require an API key. Add XAI_API_KEY to your environment.');
   }
 
   const response = await fetch(GROK_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(15000),
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`
@@ -167,7 +168,7 @@ Respond with JSON: { "name": "...", "subtitle": "...", "description": "...", "ke
     return c.json(result);
   } catch (e) {
     console.error('AI generate-metadata error:', e.message);
-    const status = e.message.includes('XAI_API_KEY') ? 503 : 500;
+    const status = e.message.includes('API key') ? 503 : 500;
     return c.json({ error: e.message }, status);
   }
 });
@@ -193,7 +194,7 @@ app.post('/ai/generate-description', async (c) => {
     return c.json({ description });
   } catch (e) {
     console.error('AI generate-description error:', e.message);
-    const status = e.message.includes('XAI_API_KEY') ? 503 : 500;
+    const status = e.message.includes('API key') ? 503 : 500;
     return c.json({ error: e.message }, status);
   }
 });
@@ -221,7 +222,7 @@ app.post('/ai/generate-keywords', async (c) => {
     return c.json({ keywords });
   } catch (e) {
     console.error('AI generate-keywords error:', e.message);
-    const status = e.message.includes('XAI_API_KEY') ? 503 : 500;
+    const status = e.message.includes('API key') ? 503 : 500;
     return c.json({ error: e.message }, status);
   }
 });
@@ -247,7 +248,7 @@ app.post('/ai/generate-whats-new', async (c) => {
     return c.json({ whatsNew });
   } catch (e) {
     console.error('AI generate-whats-new error:', e.message);
-    const status = e.message.includes('XAI_API_KEY') ? 503 : 500;
+    const status = e.message.includes('API key') ? 503 : 500;
     return c.json({ error: e.message }, status);
   }
 });
@@ -274,7 +275,7 @@ app.post('/ai/improve-text', async (c) => {
     return c.json({ improved });
   } catch (e) {
     console.error('AI improve-text error:', e.message);
-    const status = e.message.includes('XAI_API_KEY') ? 503 : 500;
+    const status = e.message.includes('API key') ? 503 : 500;
     return c.json({ error: e.message }, status);
   }
 });
@@ -311,7 +312,7 @@ app.post('/ai/suggest-keywords', async (c) => {
     return c.json(result);
   } catch (e) {
     console.error('AI suggest-keywords error:', e.message);
-    const status = e.message.includes('XAI_API_KEY') ? 503 : 500;
+    const status = e.message.includes('API key') ? 503 : 500;
     return c.json({ error: e.message }, status);
   }
 });
@@ -336,13 +337,14 @@ app.post('/ai/generate-background', async (c) => {
 
     const apiKey = process.env.XAI_API_KEY;
     if (!apiKey) {
-      return c.json({ error: 'XAI_API_KEY environment variable is not set' }, 503);
+      return c.json({ error: 'AI features require an API key. Add XAI_API_KEY to your environment.' }, 503);
     }
 
     const fullPrompt = `Create a clean, modern background image suitable for an App Store screenshot. The image should be visually appealing but not too busy, as text and a device mockup will be overlaid on top. ${prompt}`;
 
     const response = await fetch(GROK_IMAGE_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(30000),
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`

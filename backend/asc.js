@@ -9,13 +9,23 @@ import { readFileSync } from 'node:fs';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import crypto from 'node:crypto';
-import path from 'node:path';
+import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const execAsync = promisify(exec);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-import { dirname } from 'node:path';
+/**
+ * Derive an HTTP status code from an ASC-related error message.
+ *
+ * @param {Error} error - The caught error
+ * @returns {number} 503 for missing config, 502 for upstream failures, 500 otherwise
+ */
+function getASCErrorStatus(error) {
+  if (error.message.includes('Missing ASC environment')) return 503;
+  if (error.message.includes('ASC API')) return 502;
+  return 500;
+}
 
 const ASC_BASE_URL = 'https://api.appstoreconnect.apple.com/v1';
 const TOKEN_EXPIRY = '20m';
@@ -81,6 +91,7 @@ async function ascFetch(endpoint, options = {}) {
 
   const response = await fetch(url, {
     ...options,
+    signal: AbortSignal.timeout(15000),
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
@@ -136,7 +147,8 @@ app.get('/asc/apps', async (c) => {
     return c.json({ data });
   } catch (e) {
     console.error('ASC /apps error:', e.message);
-    return c.json({ error: e.message }, 500);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
   }
 });
 
@@ -150,7 +162,8 @@ app.get('/asc/apps/:id', async (c) => {
     return c.json(result);
   } catch (e) {
     console.error(`ASC /apps/${c.req.param('id')} error:`, e.message);
-    return c.json({ error: e.message }, 500);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
   }
 });
 
@@ -164,7 +177,8 @@ app.get('/asc/apps/:id/versions', async (c) => {
     return c.json({ data });
   } catch (e) {
     console.error('ASC versions error:', e.message);
-    return c.json({ error: e.message }, 500);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
   }
 });
 
@@ -188,7 +202,8 @@ app.get('/asc/apps/:id/metadata', async (c) => {
     return c.json({ data: enriched });
   } catch (e) {
     console.error('ASC metadata error:', e.message);
-    return c.json({ error: e.message }, 500);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
   }
 });
 
@@ -220,7 +235,8 @@ app.patch('/asc/apps/:id/metadata', async (c) => {
     return c.json(result);
   } catch (e) {
     console.error('ASC metadata update error:', e.message);
-    return c.json({ error: e.message }, 500);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
   }
 });
 
@@ -276,7 +292,8 @@ app.get('/asc/apps/:id/screenshots', async (c) => {
     return c.json({ data: result, versionId: latestVersion.id });
   } catch (e) {
     console.error('ASC screenshots error:', e.message);
-    return c.json({ error: e.message }, 500);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
   }
 });
 
@@ -364,7 +381,8 @@ app.post('/asc/apps/:id/screenshots', async (c) => {
     return c.json(commitResult, 201);
   } catch (e) {
     console.error('ASC screenshot upload error:', e.message);
-    return c.json({ error: e.message }, 500);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
   }
 });
 
@@ -385,8 +403,13 @@ app.get('/asc/simulators', async (c) => {
     }, 501);
   }
   try {
-    const { stdout } = await execAsync('xcrun simctl list devices available -j');
-    const parsed = JSON.parse(stdout);
+    const { stdout } = await execAsync('xcrun simctl list devices available -j', { timeout: 30000 });
+    let parsed;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      return c.json({ error: 'Failed to parse simulator list' }, 500);
+    }
     const simulators = [];
 
     for (const [runtime, deviceList] of Object.entries(parsed.devices)) {
@@ -406,7 +429,8 @@ app.get('/asc/simulators', async (c) => {
     return c.json({ simulators });
   } catch (e) {
     console.error('ASC simulators error:', e.message);
-    return c.json({ error: e.message }, 500);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
   }
 });
 
@@ -420,7 +444,8 @@ app.delete('/asc/screenshots/:id', async (c) => {
     return c.json({ success: true });
   } catch (e) {
     console.error('ASC screenshot delete error:', e.message);
-    return c.json({ error: e.message }, 500);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
   }
 });
 
@@ -440,7 +465,8 @@ async function cropStatusBar(screenshotPath, simulatorName) {
 
   // Read image dimensions via sips
   const { stdout: dimOutput } = await execAsync(
-    `sips -g pixelHeight -g pixelWidth "${screenshotPath}"`
+    `sips -g pixelHeight -g pixelWidth "${screenshotPath}"`,
+    { timeout: 30000 }
   );
 
   const heightMatch = dimOutput.match(/pixelHeight:\s*(\d+)/);
@@ -457,7 +483,8 @@ async function cropStatusBar(screenshotPath, simulatorName) {
   if (croppedHeight <= 0) return;
 
   await execAsync(
-    `sips --cropOffset ${barHeight} 0 --resampleHeightWidth ${croppedHeight} ${imgWidth} "${screenshotPath}"`
+    `sips --cropOffset ${barHeight} 0 --resampleHeightWidth ${croppedHeight} ${imgWidth} "${screenshotPath}"`,
+    { timeout: 30000 }
   );
 }
 
@@ -506,9 +533,15 @@ app.post('/asc/screenshots/capture', async (c) => {
 
     // Fetch device list once instead of per-simulator
     const { stdout: listOutput } = await execAsync(
-      'xcrun simctl list devices available -j'
+      'xcrun simctl list devices available -j',
+      { timeout: 30000 }
     );
-    const devices = JSON.parse(listOutput);
+    let devices;
+    try {
+      devices = JSON.parse(listOutput);
+    } catch {
+      return c.json({ error: 'Failed to parse simulator list' }, 500);
+    }
 
     for (const simulator of simulators) {
       try {
@@ -530,9 +563,12 @@ app.post('/asc/screenshots/capture', async (c) => {
 
         // Boot the simulator (ignore error if already booted)
         try {
-          await execAsync(`xcrun simctl boot ${deviceUDID}`);
-        } catch {
-          // Already booted — fine
+          await execAsync(`xcrun simctl boot ${deviceUDID}`, { timeout: 30000 });
+        } catch (bootErr) {
+          if (bootErr.stderr && !bootErr.stderr.includes('Unable to boot device in current state')) {
+            results.push({ simulator, error: `Failed to boot simulator: ${bootErr.message}` });
+            continue;
+          }
         }
 
         // Wait a moment for boot to complete
@@ -567,7 +603,7 @@ app.post('/asc/screenshots/capture', async (c) => {
 
             const stepFileName = `${step.name ?? `step_${Date.now()}`}_${sanitizedName}.png`;
             const screenshotPath = path.join(outDir, stepFileName);
-            await execAsync(`xcrun simctl io ${deviceUDID} screenshot "${screenshotPath}"`);
+            await execAsync(`xcrun simctl io ${deviceUDID} screenshot "${screenshotPath}"`, { timeout: 30000 });
 
             if (shouldCrop) {
               await cropStatusBar(screenshotPath, simulator);
@@ -583,7 +619,7 @@ app.post('/asc/screenshots/capture', async (c) => {
             ? `${name}_${sanitizedName}.png`
             : `screenshot_${Date.now()}.png`;
           const screenshotPath = path.join(outDir, fileName);
-          await execAsync(`xcrun simctl io ${deviceUDID} screenshot "${screenshotPath}"`);
+          await execAsync(`xcrun simctl io ${deviceUDID} screenshot "${screenshotPath}"`, { timeout: 30000 });
 
           if (shouldCrop) {
             await cropStatusBar(screenshotPath, simulator);
@@ -599,6 +635,69 @@ app.post('/asc/screenshots/capture', async (c) => {
     return c.json({ screenshots: results });
   } catch (e) {
     console.error('ASC screenshot capture error:', e.message);
+    const status = getASCErrorStatus(e);
+    return c.json({ error: e.message }, status);
+  }
+});
+
+/**
+ * POST /asc/credentials - Save App Store Connect API credentials.
+ *
+ * Writes ASC_KEY_ID, ASC_ISSUER_ID, and ASC_PRIVATE_KEY_PATH to the .env file
+ * so that generateASCToken() can read them on subsequent requests. The private
+ * key content is written to a dedicated file under backend/keys/.
+ *
+ * @param {Object} body - JSON request body
+ * @param {string} body.keyId - App Store Connect Key ID
+ * @param {string} body.issuerId - App Store Connect Issuer ID
+ * @param {string} body.privateKey - ES256 private key content (PEM)
+ * @returns {{success: boolean}} 200 on success
+ */
+app.post('/asc/credentials', async (c) => {
+  try {
+    const { keyId, issuerId, privateKey } = await c.req.json();
+
+    if (!keyId || !issuerId || !privateKey) {
+      return c.json({ error: 'keyId, issuerId, and privateKey are required' }, 400);
+    }
+
+    // Write private key to a file
+    const keysDir = path.resolve(__dirname, 'keys');
+    await mkdir(keysDir, { recursive: true });
+    const keyPath = path.join(keysDir, `AuthKey_${keyId}.p8`);
+    await writeFile(keyPath, privateKey, 'utf-8');
+
+    // Update .env file with credentials
+    const envPath = path.resolve(__dirname, '..', '.env');
+    let envContent = '';
+    try {
+      envContent = await readFile(envPath, 'utf-8');
+    } catch {
+      // .env may not exist yet
+    }
+
+    const envVars = {
+      ASC_KEY_ID: keyId,
+      ASC_ISSUER_ID: issuerId,
+      ASC_PRIVATE_KEY_PATH: `./keys/AuthKey_${keyId}.p8`
+    };
+
+    for (const [key, value] of Object.entries(envVars)) {
+      const regex = new RegExp(`^${key}=.*$`, 'm');
+      if (regex.test(envContent)) {
+        envContent = envContent.replace(regex, `${key}=${value}`);
+      } else {
+        envContent += `${envContent.endsWith('\n') || !envContent ? '' : '\n'}${key}=${value}\n`;
+      }
+      // Also set in current process so restart isn't required
+      process.env[key] = value;
+    }
+
+    await writeFile(envPath, envContent, 'utf-8');
+
+    return c.json({ success: true });
+  } catch (e) {
+    console.error('ASC credentials save error:', e.message);
     return c.json({ error: e.message }, 500);
   }
 });
