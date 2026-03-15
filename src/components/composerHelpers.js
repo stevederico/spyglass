@@ -333,6 +333,7 @@ function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, shadowBlu
  */
 export function drawComposite(canvas, state) {
   const ctx = canvas.getContext('2d');
+  try {
   const deviceInfo = DEVICES[state.device];
   const isLandscape = state.orientation === 'landscape';
   const cw = isLandscape ? deviceInfo.height : deviceInfo.width;
@@ -540,6 +541,11 @@ export function drawComposite(canvas, state) {
       drawMarketingText(ctx, state.textLine2, cw / 2, bottomTextY1 + scaledFont * 1.4, textMaxWidth, scaledFont * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
   }
+  } catch (err) {
+    console.error('drawComposite failed:', err);
+    ctx.fillStyle = '#888';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 }
 
 /** Built-in starter template presets */
@@ -581,10 +587,18 @@ export const STARTER_TEMPLATES = [
  * @returns {Promise<Blob>} PNG blob of the rendered composition
  */
 export function renderForLocale(referenceCanvas, baseState, localeCode, line1, line2) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const offscreen = document.createElement('canvas');
     drawComposite(offscreen, { ...baseState, textLine1: line1, textLine2: line2 });
-    offscreen.toBlob((blob) => resolve(blob), 'image/png');
+    const timeout = setTimeout(() => reject(new Error('renderForLocale timed out')), 10000);
+    offscreen.toBlob((blob) => {
+      clearTimeout(timeout);
+      if (!blob) {
+        reject(new Error('toBlob returned null'));
+        return;
+      }
+      resolve(blob);
+    }, 'image/png');
   });
 }
 
@@ -596,7 +610,10 @@ export function renderForLocale(referenceCanvas, baseState, localeCode, line1, l
  */
 export function exportCanvasPNG(canvas, deviceKey) {
   canvas.toBlob((blob) => {
-    if (!blob) return;
+    if (!blob) {
+      console.error('Failed to export canvas as PNG');
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

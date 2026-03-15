@@ -58,7 +58,7 @@ export default function ExportsView() {
   const [packages, setPackages] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
-  const [expandedFiles, setExpandedFiles] = useState([]);
+  const [expandedFiles, setExpandedFiles] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
 
@@ -92,6 +92,7 @@ export default function ExportsView() {
       setExpandedFiles(result?.files || []);
     } catch (err) {
       console.error('Failed to fetch package files:', err);
+      toast.error('Failed to load package files');
       setExpandedFiles([]);
     }
   }, []);
@@ -100,7 +101,7 @@ export default function ExportsView() {
     if (selectedApp?.id) {
       fetchPackages(selectedApp.id);
       setExpandedId(null);
-      setExpandedFiles([]);
+      setExpandedFiles(null);
     } else {
       setPackages([]);
     }
@@ -145,7 +146,7 @@ export default function ExportsView() {
       setDeleteId(null);
       if (expandedId === id) {
         setExpandedId(null);
-        setExpandedFiles([]);
+        setExpandedFiles(null);
       }
       toast.success('Export package deleted');
     } catch (err) {
@@ -162,10 +163,10 @@ export default function ExportsView() {
   const handleExpand = useCallback((id) => {
     if (expandedId === id) {
       setExpandedId(null);
-      setExpandedFiles([]);
+      setExpandedFiles(null);
     } else {
       setExpandedId(id);
-      setExpandedFiles([]);
+      setExpandedFiles(null);
       fetchPackageFiles(id);
     }
   }, [expandedId, fetchPackageFiles]);
@@ -252,10 +253,12 @@ export default function ExportsView() {
                 {/* Expanded file grid */}
                 {isExpanded && (
                   <div className="border-t border-border/50 bg-muted/20 px-3 py-3">
-                    {expandedFiles.length === 0 ? (
+                    {expandedFiles === null ? (
                       <div className="flex items-center justify-center py-4">
                         <Spinner className="h-4 w-4" aria-label="Loading previews" />
                       </div>
+                    ) : expandedFiles.length === 0 ? (
+                      <p className="py-4 text-center text-xs text-muted-foreground">No preview files available</p>
                     ) : (
                       <>
                         <div className="mb-2 flex flex-wrap gap-1">

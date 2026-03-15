@@ -48,6 +48,7 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
       return data;
     } catch (err) {
       console.error('Failed to fetch templates:', err);
+      toast.error('Failed to load templates');
       return [];
     }
   }, [appId]);
@@ -66,7 +67,7 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
           const loaded = await face.load();
           document.fonts.add(loaded);
         } catch {
-          // Font may already be loaded or file missing
+          console.warn('Failed to load font:', font.name);
         }
       }
     } catch (err) {
@@ -109,7 +110,7 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
       if (Array.isArray(data) && data.length === 0) {
         await seedStarterTemplates(appId);
       }
-    })();
+    })().catch(err => console.error('Template init error:', err));
 
     fetchFonts();
   }, [appId, fetchTemplates, fetchFonts, seedStarterTemplates]);

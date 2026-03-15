@@ -56,15 +56,25 @@ function ascFilename(locale, position, deviceKey) {
  */
 function renderToBytes(state) {
   return new Promise((resolve) => {
-    const canvas = document.createElement('canvas');
-    drawComposite(canvas, state);
-    canvas.toBlob((blob) => {
-      if (!blob) {
-        resolve(new Uint8Array(0));
-        return;
-      }
-      blob.arrayBuffer().then((buf) => resolve(new Uint8Array(buf)));
-    }, 'image/png');
+    const timeout = setTimeout(() => resolve(new Uint8Array(0)), 10000);
+    try {
+      const canvas = document.createElement('canvas');
+      drawComposite(canvas, state);
+      canvas.toBlob((blob) => {
+        clearTimeout(timeout);
+        if (!blob) {
+          resolve(new Uint8Array(0));
+          return;
+        }
+        blob.arrayBuffer()
+          .then((buf) => resolve(new Uint8Array(buf)))
+          .catch(() => resolve(new Uint8Array(0)));
+      }, 'image/png');
+    } catch (err) {
+      clearTimeout(timeout);
+      console.error('renderToBytes failed:', err);
+      resolve(new Uint8Array(0));
+    }
   });
 }
 

@@ -93,16 +93,14 @@ function loadGoogleFont(fontName) {
     link.rel = 'stylesheet';
     link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@300;400;700&display=swap`;
     link.onload = () => {
-      console.log(`[Font] CSS loaded for "${fontName}", waiting for font files...`);
-      document.fonts.load(`400 48px "${fontName}"`).then(() => {
-        console.log(`[Font] "${fontName}" ready`);
-        resolve();
-      }).catch(resolve);
+      // Wait for all requested weights — canvas uses Bold (700) by default
+      Promise.all([
+        document.fonts.load(`300 48px "${fontName}"`).catch(() => {}),
+        document.fonts.load(`400 48px "${fontName}"`).catch(() => {}),
+        document.fonts.load(`700 48px "${fontName}"`).catch(() => {})
+      ]).then(resolve);
     };
-    link.onerror = () => {
-      console.warn(`[Font] Failed to load CSS for "${fontName}"`);
-      resolve();
-    };
+    link.onerror = resolve;
     document.head.appendChild(link);
   });
 }
@@ -258,11 +256,7 @@ const [panelOpen, setPanelOpen] = useState(true);
   // Load Google Font stylesheet when selectedFont changes, redraw when ready
   useEffect(() => {
     if (selectedFont && GOOGLE_FONTS.includes(selectedFont)) {
-      console.log(`[Font] Selected: "${selectedFont}"`);
-      loadGoogleFont(selectedFont).then(() => {
-        console.log(`[Font] Redrawing canvas after "${selectedFont}" loaded`);
-        redrawRef.current?.();
-      });
+      loadGoogleFont(selectedFont).then(() => redrawRef.current?.()).catch(() => console.warn('Failed to load font'));
     }
   }, [selectedFont]);
 
@@ -865,15 +859,18 @@ const [panelOpen, setPanelOpen] = useState(true);
     const previewLine2 = !isEnglishLocale && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
 
     const draw = () => {
-      console.log(`[Canvas] Drawing with font: "${selectedFont}"`);
-      drawComposite(canvas, {
-        device, showBezel, screenshotImage,
-        textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
-        bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
-        autoFitText, fontFamily: selectedFont, editingLine, layers,
-        frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
-        frameLayout, orientation
-      });
+      try {
+        drawComposite(canvas, {
+          device, showBezel, screenshotImage,
+          textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
+          bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
+          autoFitText, fontFamily: selectedFont, editingLine, layers,
+          frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
+          frameLayout, orientation
+        });
+      } catch (err) {
+        console.error('Canvas draw failed:', err);
+      }
     };
 
     draw();

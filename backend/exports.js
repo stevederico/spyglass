@@ -70,21 +70,29 @@ const app = new Hono();
  * @returns {Object[]} Array of export package objects with parsed locales/devices
  */
 app.get('/exports', (c) => {
-  const appId = c.req.query('appId');
-  if (!appId) {
-    return c.json({ error: 'appId query parameter required' }, 400);
+  try {
+    const appId = c.req.query('appId');
+    if (!appId) {
+      return c.json({ error: 'appId query parameter required' }, 400);
+    }
+
+    const rows = db.prepare('SELECT * FROM export_packages WHERE app_id = ? ORDER BY created_at DESC').all(appId);
+
+    const packages = rows.map((row) => {
+      let locales = [];
+      let devices = [];
+      let metadata = null;
+      try { locales = JSON.parse(row.locales); } catch { /* skip corrupt */ }
+      try { devices = JSON.parse(row.devices); } catch { /* skip corrupt */ }
+      try { metadata = row.metadata ? JSON.parse(row.metadata) : null; } catch { /* skip corrupt */ }
+      return { ...row, locales, devices, metadata };
+    });
+
+    return c.json(packages);
+  } catch (err) {
+    console.error('GET /exports failed:', err);
+    return c.json({ error: 'Failed to list export packages' }, 500);
   }
-
-  const rows = db.prepare('SELECT * FROM export_packages WHERE app_id = ? ORDER BY created_at DESC').all(appId);
-
-  const packages = rows.map((row) => ({
-    ...row,
-    locales: JSON.parse(row.locales),
-    devices: JSON.parse(row.devices),
-    metadata: row.metadata ? JSON.parse(row.metadata) : null
-  }));
-
-  return c.json(packages);
 });
 
 /**
@@ -105,80 +113,96 @@ app.get('/exports', (c) => {
  * @returns {Object} Created export package (status 201)
  */
 app.post('/exports', async (c) => {
-  const body = await c.req.parseBody({ all: true });
+  try {
+    const body = await c.req.parseBody({ all: true });
 
-  const { appId, appName, locales, devices, metadata, screenshotCount } = body;
+    const { appId, appName, locales, devices, metadata, screenshotCount } = body;
 
-  if (!appId || !appName || !locales || !devices) {
-    return c.json({ error: 'appId, appName, locales, and devices are required' }, 400);
-  }
+    if (!appId || !appName || !locales || !devices) {
+      return c.json({ error: 'appId, appName, locales, and devices are required' }, 400);
+    }
 
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const parsedLocales = JSON.parse(locales);
-  const parsedDevices = JSON.parse(devices);
-  const packageDir = join(exportsDir, id);
-  mkdirSync(packageDir, { recursive: true });
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
 
-  // Process file uploads keyed as file-{locale}-{device}
-  const insertFile = db.prepare(
-    'INSERT INTO export_files (id, package_id, locale, device, filename, file_path) VALUES (?, ?, ?, ?, ?, ?)'
-  );
+    let parsedLocales;
+    let parsedDevices;
+    try {
+      parsedLocales = JSON.parse(locales);
+      parsedDevices = JSON.parse(devices);
+    } catch {
+      return c.json({ error: 'locales and devices must be valid JSON arrays' }, 400);
+    }
 
-  for (const key of Object.keys(body)) {
-    if (!key.startsWith('file-')) continue;
+    const packageDir = join(exportsDir, id);
+    mkdirSync(packageDir, { recursive: true });
 
-    const file = body[key];
-    if (!file || typeof file === 'string') continue;
+    // Process file uploads keyed as file-{locale}-{device}
+    const insertFile = db.prepare(
+      'INSERT INTO export_files (id, package_id, locale, device, filename, file_path) VALUES (?, ?, ?, ?, ?, ?)'
+    );
 
-    // Parse locale and device from key: file-{locale}-{device}
-    // Locale can contain hyphens (e.g., en-US), so split after first "file-"
-    // then split the rest on the last hyphen-separated device segment
-    const keyParts = key.slice(5); // remove "file-"
-    // Find the locale by matching against parsed locales
-    let fileLocale = '';
-    let fileDevice = '';
-    for (const loc of parsedLocales) {
-      if (keyParts.startsWith(loc + '-')) {
-        fileLocale = loc;
-        fileDevice = keyParts.slice(loc.length + 1);
-        break;
+    for (const key of Object.keys(body)) {
+      if (!key.startsWith('file-')) continue;
+
+      const file = body[key];
+      if (!file || typeof file === 'string') continue;
+
+      // Parse locale and device from key: file-{locale}-{device}
+      // Locale can contain hyphens (e.g., en-US), so split after first "file-"
+      // then split the rest on the last hyphen-separated device segment
+      const keyParts = key.slice(5); // remove "file-"
+      // Find the locale by matching against parsed locales
+      let fileLocale = '';
+      let fileDevice = '';
+      for (const loc of parsedLocales) {
+        if (keyParts.startsWith(loc + '-')) {
+          fileLocale = loc;
+          fileDevice = keyParts.slice(loc.length + 1);
+          break;
+        }
       }
+
+      if (!fileLocale || !fileDevice) continue;
+
+      const localeDir = join(packageDir, fileLocale);
+      if (!existsSync(localeDir)) {
+        mkdirSync(localeDir, { recursive: true });
+      }
+
+      const filename = `screenshot-${fileDevice}.png`;
+      const filePath = join(localeDir, filename);
+      const arrayBuffer = await file.arrayBuffer();
+      writeFileSync(filePath, Buffer.from(arrayBuffer));
+
+      const fileId = crypto.randomUUID();
+      insertFile.run(fileId, id, fileLocale, fileDevice, filename, filePath);
     }
 
-    if (!fileLocale || !fileDevice) continue;
+    // Insert the package record
+    const metadataJson = metadata || null;
+    db.prepare(
+      'INSERT INTO export_packages (id, app_id, app_name, locales, devices, screenshot_count, metadata, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, appId, appName, locales, devices, parseInt(screenshotCount) || 0, metadataJson, 'ready', now);
 
-    const localeDir = join(packageDir, fileLocale);
-    if (!existsSync(localeDir)) {
-      mkdirSync(localeDir, { recursive: true });
-    }
+    let parsedMetadata = null;
+    try { parsedMetadata = metadataJson ? JSON.parse(metadataJson) : null; } catch { /* skip corrupt */ }
 
-    const filename = `screenshot-${fileDevice}.png`;
-    const filePath = join(localeDir, filename);
-    const arrayBuffer = await file.arrayBuffer();
-    writeFileSync(filePath, Buffer.from(arrayBuffer));
-
-    const fileId = crypto.randomUUID();
-    insertFile.run(fileId, id, fileLocale, fileDevice, filename, filePath);
+    return c.json({
+      id,
+      app_id: appId,
+      app_name: appName,
+      locales: parsedLocales,
+      devices: parsedDevices,
+      screenshot_count: parseInt(screenshotCount) || 0,
+      metadata: parsedMetadata,
+      status: 'ready',
+      created_at: now
+    }, 201);
+  } catch (err) {
+    console.error('POST /exports failed:', err);
+    return c.json({ error: 'Failed to create export package' }, 500);
   }
-
-  // Insert the package record
-  const metadataJson = metadata || null;
-  db.prepare(
-    'INSERT INTO export_packages (id, app_id, app_name, locales, devices, screenshot_count, metadata, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, appId, appName, locales, devices, parseInt(screenshotCount) || 0, metadataJson, 'ready', now);
-
-  return c.json({
-    id,
-    app_id: appId,
-    app_name: appName,
-    locales: parsedLocales,
-    devices: parsedDevices,
-    screenshot_count: parseInt(screenshotCount) || 0,
-    metadata: metadataJson ? JSON.parse(metadataJson) : null,
-    status: 'ready',
-    created_at: now
-  }, 201);
 });
 
 /**
@@ -189,24 +213,31 @@ app.post('/exports', async (c) => {
  * @returns {Object} Object with `package` and `files` properties
  */
 app.get('/exports/:id', (c) => {
-  const { id } = c.req.param();
+  try {
+    const { id } = c.req.param();
 
-  const pkg = db.prepare('SELECT * FROM export_packages WHERE id = ?').get(id);
-  if (!pkg) {
-    return c.json({ error: 'Export package not found' }, 404);
+    const pkg = db.prepare('SELECT * FROM export_packages WHERE id = ?').get(id);
+    if (!pkg) {
+      return c.json({ error: 'Export package not found' }, 404);
+    }
+
+    const files = db.prepare('SELECT * FROM export_files WHERE package_id = ?').all(id);
+
+    let locales = [];
+    let devices = [];
+    let metadata = null;
+    try { locales = JSON.parse(pkg.locales); } catch { /* skip corrupt */ }
+    try { devices = JSON.parse(pkg.devices); } catch { /* skip corrupt */ }
+    try { metadata = pkg.metadata ? JSON.parse(pkg.metadata) : null; } catch { /* skip corrupt */ }
+
+    return c.json({
+      package: { ...pkg, locales, devices, metadata },
+      files
+    });
+  } catch (err) {
+    console.error('GET /exports/:id failed:', err);
+    return c.json({ error: 'Failed to retrieve export package' }, 500);
   }
-
-  const files = db.prepare('SELECT * FROM export_files WHERE package_id = ?').all(id);
-
-  return c.json({
-    package: {
-      ...pkg,
-      locales: JSON.parse(pkg.locales),
-      devices: JSON.parse(pkg.devices),
-      metadata: pkg.metadata ? JSON.parse(pkg.metadata) : null
-    },
-    files
-  });
 });
 
 /**
@@ -217,24 +248,27 @@ app.get('/exports/:id', (c) => {
  * @returns {Object} Success confirmation
  */
 app.delete('/exports/:id', (c) => {
-  const { id } = c.req.param();
+  try {
+    const { id } = c.req.param();
 
-  const pkg = db.prepare('SELECT * FROM export_packages WHERE id = ?').get(id);
-  if (!pkg) {
-    return c.json({ error: 'Export package not found' }, 404);
+    const pkg = db.prepare('SELECT * FROM export_packages WHERE id = ?').get(id);
+    if (!pkg) {
+      return c.json({ error: 'Export package not found' }, 404);
+    }
+
+    db.prepare('DELETE FROM export_files WHERE package_id = ?').run(id);
+    db.prepare('DELETE FROM export_packages WHERE id = ?').run(id);
+
+    const packageDir = join(exportsDir, id);
+    if (existsSync(packageDir)) {
+      rmSync(packageDir, { recursive: true, force: true });
+    }
+
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /exports/:id failed:', err);
+    return c.json({ error: 'Failed to delete export package' }, 500);
   }
-
-  // Remove files from database
-  db.prepare('DELETE FROM export_files WHERE package_id = ?').run(id);
-  db.prepare('DELETE FROM export_packages WHERE id = ?').run(id);
-
-  // Remove storage directory
-  const packageDir = join(exportsDir, id);
-  if (existsSync(packageDir)) {
-    rmSync(packageDir, { recursive: true, force: true });
-  }
-
-  return c.json({ success: true });
 });
 
 /**
@@ -248,43 +282,47 @@ app.delete('/exports/:id', (c) => {
  * @returns {Response} Zip file download with Content-Disposition header
  */
 app.get('/exports/:id/download', (c) => {
-  const { id } = c.req.param();
+  try {
+    const { id } = c.req.param();
 
-  const pkg = db.prepare('SELECT * FROM export_packages WHERE id = ?').get(id);
-  if (!pkg) {
-    return c.json({ error: 'Export package not found' }, 404);
-  }
-
-  const packageDir = join(exportsDir, id);
-  if (!existsSync(packageDir)) {
-    return c.json({ error: 'Export files not found' }, 404);
-  }
-
-  // Build file map for fflate zipSync
-  const zipData = {};
-  const localeDirs = readdirSync(packageDir, { withFileTypes: true });
-
-  for (const entry of localeDirs) {
-    if (!entry.isDirectory()) continue;
-    const localeDir = join(packageDir, entry.name);
-    const files = readdirSync(localeDir);
-
-    for (const filename of files) {
-      const filePath = join(localeDir, filename);
-      const fileBuffer = readFileSync(filePath);
-      zipData[`${entry.name}/${filename}`] = new Uint8Array(fileBuffer);
+    const pkg = db.prepare('SELECT * FROM export_packages WHERE id = ?').get(id);
+    if (!pkg) {
+      return c.json({ error: 'Export package not found' }, 404);
     }
-  }
 
-  const zipped = zipSync(zipData);
-  const appName = pkg.app_name.replace(/[^a-zA-Z0-9_-]/g, '_');
-
-  return new Response(Buffer.from(zipped), {
-    headers: {
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${appName}-export.zip"`
+    const packageDir = join(exportsDir, id);
+    if (!existsSync(packageDir)) {
+      return c.json({ error: 'Export files not found' }, 404);
     }
-  });
+
+    const zipData = {};
+    const localeDirs = readdirSync(packageDir, { withFileTypes: true });
+
+    for (const entry of localeDirs) {
+      if (!entry.isDirectory()) continue;
+      const localeDir = join(packageDir, entry.name);
+      const files = readdirSync(localeDir);
+
+      for (const filename of files) {
+        const filePath = join(localeDir, filename);
+        const fileBuffer = readFileSync(filePath);
+        zipData[`${entry.name}/${filename}`] = new Uint8Array(fileBuffer);
+      }
+    }
+
+    const zipped = zipSync(zipData);
+    const appName = pkg.app_name.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    return new Response(Buffer.from(zipped), {
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${appName}-export.zip"`
+      }
+    });
+  } catch (err) {
+    console.error('GET /exports/:id/download failed:', err);
+    return c.json({ error: 'Failed to generate export zip' }, 500);
+  }
 });
 
 /**
@@ -296,25 +334,30 @@ app.get('/exports/:id/download', (c) => {
  * @returns {Response} PNG image with cache headers
  */
 app.get('/exports/:id/files/:fileId', (c) => {
-  const { fileId } = c.req.param();
+  try {
+    const { fileId } = c.req.param();
 
-  const file = db.prepare('SELECT * FROM export_files WHERE id = ?').get(fileId);
-  if (!file) {
-    return c.json({ error: 'File not found' }, 404);
-  }
-
-  if (!existsSync(file.file_path)) {
-    return c.json({ error: 'File missing from disk' }, 404);
-  }
-
-  const buffer = readFileSync(file.file_path);
-
-  return new Response(buffer, {
-    headers: {
-      'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=31536000'
+    const file = db.prepare('SELECT * FROM export_files WHERE id = ?').get(fileId);
+    if (!file) {
+      return c.json({ error: 'File not found' }, 404);
     }
-  });
+
+    if (!existsSync(file.file_path)) {
+      return c.json({ error: 'File missing from disk' }, 404);
+    }
+
+    const buffer = readFileSync(file.file_path);
+
+    return new Response(buffer, {
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=31536000'
+      }
+    });
+  } catch (err) {
+    console.error('GET /exports/:id/files/:fileId failed:', err);
+    return c.json({ error: 'Failed to read export file' }, 500);
+  }
 });
 
 export default app;

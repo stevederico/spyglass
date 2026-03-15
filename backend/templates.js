@@ -65,20 +65,28 @@ if (!existsSync(fontsDir)) {
  * @returns {Object[]} Array of template objects with parsed settings
  */
 app.get('/templates', (c) => {
-  const appId = c.req.query('appId');
-  if (!appId) {
-    return c.json({ error: 'appId query parameter required' }, 400);
+  try {
+    const appId = c.req.query('appId');
+    if (!appId) {
+      return c.json({ error: 'appId query parameter required' }, 400);
+    }
+
+    const stmt = db.prepare('SELECT * FROM templates WHERE app_id = ? ORDER BY updated_at DESC');
+    const rows = stmt.all(appId);
+
+    const templates = rows.map((row) => {
+      try {
+        return { ...row, settings: JSON.parse(row.settings) };
+      } catch {
+        return { ...row, settings: {} };
+      }
+    });
+
+    return c.json(templates);
+  } catch (err) {
+    console.error('Failed to list templates:', err);
+    return c.json({ error: 'Failed to list templates' }, 500);
   }
-
-  const stmt = db.prepare('SELECT * FROM templates WHERE app_id = ? ORDER BY updated_at DESC');
-  const rows = stmt.all(appId);
-
-  const templates = rows.map((row) => ({
-    ...row,
-    settings: JSON.parse(row.settings)
-  }));
-
-  return c.json(templates);
 });
 
 /**
@@ -92,22 +100,27 @@ app.get('/templates', (c) => {
  * @returns {Object} Created template with parsed settings
  */
 app.post('/templates', async (c) => {
-  const { name, appId, settings } = await c.req.json();
+  try {
+    const { name, appId, settings } = await c.req.json();
 
-  if (!name || !appId || !settings) {
-    return c.json({ error: 'name, appId, and settings are required' }, 400);
+    if (!name || !appId || !settings) {
+      return c.json({ error: 'name, appId, and settings are required' }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const settingsJson = JSON.stringify(settings);
+
+    const stmt = db.prepare(
+      'INSERT INTO templates (id, app_id, name, settings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    stmt.run(id, appId, name, settingsJson, now, now);
+
+    return c.json({ id, app_id: appId, name, settings, created_at: now, updated_at: now }, 201);
+  } catch (err) {
+    console.error('Failed to create template:', err);
+    return c.json({ error: 'Failed to create template' }, 500);
   }
-
-  const id = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const settingsJson = JSON.stringify(settings);
-
-  const stmt = db.prepare(
-    'INSERT INTO templates (id, app_id, name, settings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-  );
-  stmt.run(id, appId, name, settingsJson, now, now);
-
-  return c.json({ id, app_id: appId, name, settings, created_at: now, updated_at: now }, 201);
 });
 
 /**
@@ -121,29 +134,34 @@ app.post('/templates', async (c) => {
  * @returns {Object} Updated template
  */
 app.patch('/templates/:id', async (c) => {
-  const { id } = c.req.param();
-  const body = await c.req.json();
+  try {
+    const { id } = c.req.param();
+    const body = await c.req.json();
 
-  const existing = db.prepare('SELECT * FROM templates WHERE id = ?').get(id);
-  if (!existing) {
-    return c.json({ error: 'Template not found' }, 404);
+    const existing = db.prepare('SELECT * FROM templates WHERE id = ?').get(id);
+    if (!existing) {
+      return c.json({ error: 'Template not found' }, 404);
+    }
+
+    const name = body.name ?? existing.name;
+    const settings = body.settings ? JSON.stringify(body.settings) : existing.settings;
+    const now = new Date().toISOString();
+
+    db.prepare('UPDATE templates SET name = ?, settings = ?, updated_at = ? WHERE id = ?')
+      .run(name, settings, now, id);
+
+    return c.json({
+      id,
+      app_id: existing.app_id,
+      name,
+      settings: JSON.parse(settings),
+      created_at: existing.created_at,
+      updated_at: now
+    });
+  } catch (err) {
+    console.error('Failed to update template:', err);
+    return c.json({ error: 'Failed to update template' }, 500);
   }
-
-  const name = body.name ?? existing.name;
-  const settings = body.settings ? JSON.stringify(body.settings) : existing.settings;
-  const now = new Date().toISOString();
-
-  db.prepare('UPDATE templates SET name = ?, settings = ?, updated_at = ? WHERE id = ?')
-    .run(name, settings, now, id);
-
-  return c.json({
-    id,
-    app_id: existing.app_id,
-    name,
-    settings: JSON.parse(settings),
-    created_at: existing.created_at,
-    updated_at: now
-  });
 });
 
 /**
@@ -154,15 +172,20 @@ app.patch('/templates/:id', async (c) => {
  * @returns {Object} Success confirmation
  */
 app.delete('/templates/:id', (c) => {
-  const { id } = c.req.param();
+  try {
+    const { id } = c.req.param();
 
-  const existing = db.prepare('SELECT * FROM templates WHERE id = ?').get(id);
-  if (!existing) {
-    return c.json({ error: 'Template not found' }, 404);
+    const existing = db.prepare('SELECT * FROM templates WHERE id = ?').get(id);
+    if (!existing) {
+      return c.json({ error: 'Template not found' }, 404);
+    }
+
+    db.prepare('DELETE FROM templates WHERE id = ?').run(id);
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('Failed to delete template:', err);
+    return c.json({ error: 'Failed to delete template' }, 500);
   }
-
-  db.prepare('DELETE FROM templates WHERE id = ?').run(id);
-  return c.json({ success: true });
 });
 
 /**
@@ -173,29 +196,34 @@ app.delete('/templates/:id', (c) => {
  * @returns {Object} Newly created duplicate template
  */
 app.post('/templates/:id/duplicate', (c) => {
-  const { id } = c.req.param();
+  try {
+    const { id } = c.req.param();
 
-  const existing = db.prepare('SELECT * FROM templates WHERE id = ?').get(id);
-  if (!existing) {
-    return c.json({ error: 'Template not found' }, 404);
+    const existing = db.prepare('SELECT * FROM templates WHERE id = ?').get(id);
+    if (!existing) {
+      return c.json({ error: 'Template not found' }, 404);
+    }
+
+    const newId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const newName = `${existing.name} (Copy)`;
+
+    db.prepare(
+      'INSERT INTO templates (id, app_id, name, settings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(newId, existing.app_id, newName, existing.settings, now, now);
+
+    return c.json({
+      id: newId,
+      app_id: existing.app_id,
+      name: newName,
+      settings: JSON.parse(existing.settings),
+      created_at: now,
+      updated_at: now
+    }, 201);
+  } catch (err) {
+    console.error('Failed to duplicate template:', err);
+    return c.json({ error: 'Failed to duplicate template' }, 500);
   }
-
-  const newId = crypto.randomUUID();
-  const now = new Date().toISOString();
-  const newName = `${existing.name} (Copy)`;
-
-  db.prepare(
-    'INSERT INTO templates (id, app_id, name, settings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-  ).run(newId, existing.app_id, newName, existing.settings, now, now);
-
-  return c.json({
-    id: newId,
-    app_id: existing.app_id,
-    name: newName,
-    settings: JSON.parse(existing.settings),
-    created_at: now,
-    updated_at: now
-  }, 201);
 });
 
 // ============================================================
@@ -210,34 +238,38 @@ app.post('/templates/:id/duplicate', (c) => {
  * @returns {Object} Created font record with id, name, and filename
  */
 app.post('/templates/fonts', async (c) => {
-  const body = await c.req.parseBody();
-  const file = body.file;
+  try {
+    const body = await c.req.parseBody();
+    const file = body.file;
 
-  if (!file || typeof file === 'string') {
-    return c.json({ error: 'Font file is required' }, 400);
+    if (!file || typeof file === 'string') {
+      return c.json({ error: 'Font file is required' }, 400);
+    }
+
+    const filename = file.name || 'font.ttf';
+    const ext = filename.split('.').pop().toLowerCase();
+
+    if (!['ttf', 'otf'].includes(ext)) {
+      return c.json({ error: 'Only TTF and OTF files are supported' }, 400);
+    }
+
+    const id = crypto.randomUUID();
+    const name = filename.replace(/\.(ttf|otf)$/i, '');
+    const storedFilename = `${id}.${ext}`;
+    const filePath = join(fontsDir, storedFilename);
+
+    const arrayBuffer = await file.arrayBuffer();
+    writeFileSync(filePath, Buffer.from(arrayBuffer));
+
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO custom_fonts (id, name, filename, created_at) VALUES (?, ?, ?, ?)')
+      .run(id, name, storedFilename, now);
+
+    return c.json({ id, name, filename: storedFilename, created_at: now }, 201);
+  } catch (err) {
+    console.error('Failed to upload font:', err);
+    return c.json({ error: 'Failed to upload font' }, 500);
   }
-
-  const filename = file.name || 'font.ttf';
-  const ext = filename.split('.').pop().toLowerCase();
-
-  if (!['ttf', 'otf'].includes(ext)) {
-    return c.json({ error: 'Only TTF and OTF files are supported' }, 400);
-  }
-
-  const id = crypto.randomUUID();
-  const name = filename.replace(/\.(ttf|otf)$/i, '');
-  const storedFilename = `${id}.${ext}`;
-  const filePath = join(fontsDir, storedFilename);
-
-  // Write font file to disk
-  const arrayBuffer = await file.arrayBuffer();
-  writeFileSync(filePath, Buffer.from(arrayBuffer));
-
-  const now = new Date().toISOString();
-  db.prepare('INSERT INTO custom_fonts (id, name, filename, created_at) VALUES (?, ?, ?, ?)')
-    .run(id, name, storedFilename, now);
-
-  return c.json({ id, name, filename: storedFilename, created_at: now }, 201);
 });
 
 /**
@@ -247,8 +279,13 @@ app.post('/templates/fonts', async (c) => {
  * @returns {Object[]} Array of font records
  */
 app.get('/templates/fonts', (c) => {
-  const rows = db.prepare('SELECT * FROM custom_fonts ORDER BY created_at DESC').all();
-  return c.json(rows);
+  try {
+    const rows = db.prepare('SELECT * FROM custom_fonts ORDER BY created_at DESC').all();
+    return c.json(rows);
+  } catch (err) {
+    console.error('Failed to list fonts:', err);
+    return c.json({ error: 'Failed to list fonts' }, 500);
+  }
 });
 
 /**
@@ -259,28 +296,33 @@ app.get('/templates/fonts', (c) => {
  * @returns {Blob} Font file with appropriate content type
  */
 app.get('/templates/fonts/:id/file', (c) => {
-  const { id } = c.req.param();
+  try {
+    const { id } = c.req.param();
 
-  const existing = db.prepare('SELECT * FROM custom_fonts WHERE id = ?').get(id);
-  if (!existing) {
-    return c.json({ error: 'Font not found' }, 404);
-  }
-
-  const filePath = join(fontsDir, existing.filename);
-  if (!existsSync(filePath)) {
-    return c.json({ error: 'Font file missing' }, 404);
-  }
-
-  const ext = existing.filename.split('.').pop().toLowerCase();
-  const contentType = ext === 'otf' ? 'font/otf' : 'font/ttf';
-  const buffer = readFileSync(filePath);
-
-  return new Response(buffer, {
-    headers: {
-      'Content-Type': contentType,
-      'Cache-Control': 'public, max-age=31536000'
+    const existing = db.prepare('SELECT * FROM custom_fonts WHERE id = ?').get(id);
+    if (!existing) {
+      return c.json({ error: 'Font not found' }, 404);
     }
-  });
+
+    const filePath = join(fontsDir, existing.filename);
+    if (!existsSync(filePath)) {
+      return c.json({ error: 'Font file missing' }, 404);
+    }
+
+    const ext = existing.filename.split('.').pop().toLowerCase();
+    const contentType = ext === 'otf' ? 'font/otf' : 'font/ttf';
+    const buffer = readFileSync(filePath);
+
+    return new Response(buffer, {
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=31536000'
+      }
+    });
+  } catch (err) {
+    console.error('Failed to serve font file:', err);
+    return c.json({ error: 'Failed to serve font file' }, 500);
+  }
 });
 
 /**
@@ -291,21 +333,25 @@ app.get('/templates/fonts/:id/file', (c) => {
  * @returns {Object} Success confirmation
  */
 app.delete('/templates/fonts/:id', (c) => {
-  const { id } = c.req.param();
+  try {
+    const { id } = c.req.param();
 
-  const existing = db.prepare('SELECT * FROM custom_fonts WHERE id = ?').get(id);
-  if (!existing) {
-    return c.json({ error: 'Font not found' }, 404);
+    const existing = db.prepare('SELECT * FROM custom_fonts WHERE id = ?').get(id);
+    if (!existing) {
+      return c.json({ error: 'Font not found' }, 404);
+    }
+
+    const filePath = join(fontsDir, existing.filename);
+    if (existsSync(filePath)) {
+      unlinkSync(filePath);
+    }
+
+    db.prepare('DELETE FROM custom_fonts WHERE id = ?').run(id);
+    return c.json({ success: true });
+  } catch (err) {
+    console.error('Failed to delete font:', err);
+    return c.json({ error: 'Failed to delete font' }, 500);
   }
-
-  // Delete font file from disk
-  const filePath = join(fontsDir, existing.filename);
-  if (existsSync(filePath)) {
-    unlinkSync(filePath);
-  }
-
-  db.prepare('DELETE FROM custom_fonts WHERE id = ?').run(id);
-  return c.json({ success: true });
 });
 
 export default app;

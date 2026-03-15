@@ -164,6 +164,7 @@ export function useSlots() {
                 prev.map((s) => (s.id === slotId ? { ...s, [field]: img } : s))
               );
             };
+            img.onerror = () => console.warn('Failed to hydrate slot image:', field);
             img.src = src;
           }
         }

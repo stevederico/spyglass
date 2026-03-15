@@ -150,9 +150,10 @@ export function useSessionState(key, defaultValue, options = {}) {
       if (src && typeof src === 'string' && src.length > 0) {
         const img = new Image();
         img.onload = () => setValueRaw(img);
+        img.onerror = () => {};
         img.src = src;
       }
-    });
+    }).catch(() => {});
   }, [key, isImage]);
 
   const setValue = useCallback((newValueOrFn) => {

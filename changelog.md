@@ -4,6 +4,16 @@
 - ASO keyword tool
 - CLI tool (browserless usage)
 
+0.9.2
+
+  Add exports error handling
+  Add templates error handling
+  Add drawComposite try/catch
+  Add renderForLocale timeout
+  Fix exportCanvasPNG error log
+  Update BatchExportDialog slots
+  Update ScreenshotsView controls
+
 0.9.1
 
   Remove unused dependencies
