@@ -274,3 +274,23 @@ This project was created from the skateboard boilerplate. The `skateboardVersion
 Do NOT automatically apply boilerplate updates. Always consult the user first and show what changes would be made.
 
 make sure you read the readme in the @stevederico/skateboard-ui package
+
+## Dev Validation
+
+**After implementing any UI change, you MUST verify your work using `agent-browser` in headless mode.**
+
+### Workflow
+1. Start the dev server if not already running (`npm run start`)
+2. Open the page: `agent-browser open http://localhost:5173`
+3. Navigate to the relevant view
+4. Take a screenshot: `agent-browser screenshot .agent-browser/verify.png`
+5. Read the screenshot to confirm the change looks correct
+6. Check for errors: `agent-browser errors`
+7. Close the browser: `agent-browser close`
+8. Clean up: `rm .agent-browser/verify.png`
+
+### Rules
+- **Never use `--headed`** — agent-browser runs headless by default, keep it that way
+- Validate every UI change before considering the task complete
+- If the screenshot reveals issues, fix and re-verify
+- Clean up all screenshots when done

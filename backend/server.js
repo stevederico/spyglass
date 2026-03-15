@@ -15,6 +15,7 @@ import translateApp from './translate.js';
 import aiApp from './ai.js';
 import templatesApp from './templates.js';
 import metadataHistoryApp from './metadataHistory.js';
+import exportsApp from './exports.js';
 import { databaseManager } from "./adapters/manager.js";
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1405,6 +1406,7 @@ app.route('/api', translateApp);
 app.route('/api', aiApp);
 app.route('/api', templatesApp);
 app.route('/api', metadataHistoryApp);
+app.route('/api', exportsApp);
 
 // ==== STATIC FILE SERVING (Production) ====
 // All /api/* routes are handled above. Everything else is static/SPA.

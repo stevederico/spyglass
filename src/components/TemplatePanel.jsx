@@ -1,14 +1,14 @@
 /**
- * Template management panel for saving and loading studio presets
+ * Template management panel for saving and loading screenshot presets
  *
  * Displays saved templates for the current app with actions to load, duplicate,
  * and delete. Provides a save dialog for creating new templates from current
- * studio state. Includes font management with upload and selection of custom fonts.
+ * screenshot state. Includes font management with upload and selection of custom fonts.
  * Seeds starter templates on first load when no templates exist for the app.
  *
  * @component
  * @param {Object} props
- * @param {Object} props.currentState - Current StudioView state to save as template
+ * @param {Object} props.currentState - Current screenshot state to save as template
  * @param {Function} props.onLoadTemplate - Callback to apply template settings
  * @param {string} props.appId - Current app ID for filtering templates
  * @param {string} props.selectedFont - Currently selected font family name
@@ -119,7 +119,7 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
     fetchFonts();
   }, [appId, fetchTemplates, fetchFonts, seedStarterTemplates]);
 
-  /** Save current studio state as a new template */
+  /** Save current screenshot state as a new template */
   const handleSave = useCallback(async () => {
     if (!templateName.trim()) {
       toast.error('Enter a template name');
@@ -314,7 +314,9 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
           <Label htmlFor="font-family-select">Font Family</Label>
           <Select value={selectedFont || 'system-default'} onValueChange={(val) => onFontChange(val === 'system-default' ? '' : val)}>
             <SelectTrigger id="font-family-select" aria-label="Font family selection">
-              <SelectValue placeholder="System Default" />
+              <SelectValue>
+                {selectedFont || 'System Default'}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="system-default">System Default</SelectItem>

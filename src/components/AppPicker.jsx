@@ -62,8 +62,8 @@ export default function AppPicker() {
         value={selectedApp?.id || ''}
         onValueChange={handleValueChange}
       >
-        <SelectTrigger className="h-8 w-48" aria-label="Select an app">
-          <SelectValue placeholder="Select App" />
+        <SelectTrigger className="h-8 w-auto min-w-48 max-w-64" aria-label="Select an app">
+          <SelectValue placeholder="Select App">{selectedApp?.name || 'Select App'}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           {isLoadingApps ? (
@@ -71,7 +71,7 @@ export default function AppPicker() {
           ) : (
             apps.map((app) => (
               <SelectItem key={app.id} value={app.id}>
-                {app.attributes?.name || app.name || app.id}
+                {app.attributes?.name || app.name || "Untitled App"}
               </SelectItem>
             ))
           )}

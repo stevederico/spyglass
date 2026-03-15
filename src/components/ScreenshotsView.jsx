@@ -1,5 +1,5 @@
 /**
- * Studio view for creating App Store marketing screenshots with localization
+ * Screenshots view for creating App Store marketing screenshots with localization
  *
  * Provides a canvas-based editor that layers background, device frame,
  * screenshot, and marketing text. Left panel shows a live preview,
@@ -8,7 +8,7 @@
  * template management, custom fonts, batch export, and preview-all-sizes.
  *
  * @component
- * @returns {JSX.Element} Screenshot studio interface
+ * @returns {JSX.Element} Screenshot composer interface
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
 import Header from '@stevederico/skateboard-ui/Header';
@@ -26,6 +26,7 @@ import { Progress } from '@stevederico/skateboard-ui/shadcn/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@stevederico/skateboard-ui/shadcn/ui/table';
 import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
+import { Spinner } from '@stevederico/skateboard-ui/shadcn/ui/spinner';
 import { toast } from 'sonner';
 import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG, renderForLocale } from './composerHelpers.js';
 import { useApp } from './AppContext.jsx';
@@ -109,7 +110,7 @@ function getStatusBadge(status) {
   }
 }
 
-export default function StudioView() {
+export default function ScreenshotsView() {
   const { selectedApp } = useApp();
   const canvasRef = useRef(null);
 
@@ -120,6 +121,8 @@ export default function StudioView() {
   const [gradientEnd, setGradientEnd] = useState('#16213e');
   const [gradientDirection, setGradientDirection] = useState('top-bottom');
   const [bgImage, setBgImage] = useState(null);
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [isGeneratingBg, setIsGeneratingBg] = useState(false);
 
   // Text state
   const [textLine1, setTextLine1] = useState('Track Your Fitness');
@@ -144,11 +147,11 @@ export default function StudioView() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationProgress, setTranslationProgress] = useState(0);
   const [showTranslations, setShowTranslations] = useState(false);
-  const [previewLocale, setPreviewLocale] = useState('');
+  const [previewLocale, setPreviewLocale] = useState('original');
 
   // QoL state
   const [showPreviewAll, setShowPreviewAll] = useState(false);
-  const [canvasBgMode, setCanvasBgMode] = useState('light');
+const [panelOpen, setPanelOpen] = useState(true);
 
   // Batch export state
   const [showBatchExport, setShowBatchExport] = useState(false);
@@ -259,6 +262,40 @@ export default function StudioView() {
   }
 
   /**
+   * Generate a background image using xAI Grok image generation.
+   * Calls POST /api/ai/generate-background with the user's prompt,
+   * receives a base64 data URI, and loads it as the canvas background.
+   */
+  async function handleGenerateBg() {
+    if (!aiPrompt.trim()) {
+      toast.error('Enter a description for the background');
+      return;
+    }
+    setIsGeneratingBg(true);
+    try {
+      const response = await apiRequest('/ai/generate-background', {
+        method: 'POST',
+        body: JSON.stringify({ prompt: aiPrompt })
+      });
+      if (response?.image) {
+        const img = new Image();
+        img.onload = () => {
+          setBgImage(img);
+          toast.success('AI background applied');
+        };
+        img.onerror = () => toast.error('Failed to load generated image');
+        img.src = response.image;
+      } else {
+        toast.error(response?.error || 'Failed to generate background');
+      }
+    } catch (err) {
+      toast.error('Background generation failed');
+    } finally {
+      setIsGeneratingBg(false);
+    }
+  }
+
+  /**
    * Handle screenshot upload
    *
    * @param {Event} e - File input change event
@@ -302,7 +339,7 @@ export default function StudioView() {
   }
 
   /**
-   * Apply template settings to current studio state
+   * Apply template settings to current screenshot state
    *
    * @param {Object} settings - Template settings object
    */
@@ -470,8 +507,8 @@ export default function StudioView() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const previewLine1 = previewLocale && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
-    const previewLine2 = previewLocale && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
+    const previewLine1 = previewLocale !== 'original' && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
+    const previewLine2 = previewLocale !== 'original' && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
 
     drawComposite(canvas, {
       device, showBezel, screenshotImage,
@@ -486,25 +523,32 @@ export default function StudioView() {
     autoFitText, selectedFont, previewLocale, translations
   ]);
 
-  /** Canvas container background class based on preview mode */
-  const canvasBgClass = canvasBgMode === 'dark' ? 'bg-zinc-900' : 'bg-accent/30';
 
   return (
     <>
-      <Header title="" className="[&>div>div:last-child]:ml-0">
+      <Header title="" className="[&>div>div:last-child]:ml-0 [&>div>div:last-child]:flex-1">
         <AppPicker />
+        <div className="flex-1" />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setPanelOpen((v) => !v)}
+          aria-label={panelOpen ? 'Hide tools panel' : 'Show tools panel'}
+          aria-expanded={panelOpen}
+          aria-controls="screenshot-settings-panel"
+        >
+          {panelOpen ? 'Hide Tools' : 'Show Tools'}
+        </Button>
       </Header>
       {!selectedApp ? (
         <div className="flex flex-1 items-center justify-center">
           <p className="text-muted-foreground">Select an app to get started</p>
         </div>
       ) : (
-      <div className="flex flex-1 flex-col">
-        <div className="flex flex-col gap-4 p-4 md:p-6 lg:flex-row">
-
-          {/* Left: Canvas Preview */}
-          <section className="flex flex-col items-center gap-3 lg:w-3/5" aria-label="Screenshot preview">
-            <div className={`w-full max-w-md rounded-lg border border-border p-4 ${canvasBgClass}`}>
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        {/* Canvas Preview */}
+        <section className="flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 md:p-6" aria-label="Screenshot preview">
+            <div className={`w-full rounded-lg border border-border p-4 bg-accent/30 transition-all duration-300 ease-in-out ${panelOpen ? 'max-w-lg' : 'max-w-xl'}`}>
               <canvas
                 ref={canvasRef}
                 style={{ width: '100%', height: 'auto', borderRadius: '8px' }}
@@ -515,226 +559,145 @@ export default function StudioView() {
               {currentDevice.width} &times; {currentDevice.height}px &mdash; {currentDevice.label}
             </p>
 
-            {/* Undo / Redo / Dark Preview controls */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={undo}
-                disabled={!canUndo}
-                aria-label="Undo last change"
-              >
-                Undo
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={redo}
-                disabled={!canRedo}
-                aria-label="Redo last change"
-              >
-                Redo
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCanvasBgMode(canvasBgMode === 'light' ? 'dark' : 'light')}
-                aria-label={canvasBgMode === 'light' ? 'Switch to dark preview background' : 'Switch to light preview background'}
-              >
-                {canvasBgMode === 'light' ? 'Dark Preview' : 'Light Preview'}
-              </Button>
+            {/* Device Size Picker */}
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {DEVICE_OPTIONS.map((d) => {
+                const info = DEVICES[d.key];
+                const aspect = info.width / info.height;
+                const isSelected = device === d.key;
+                const h = 44;
+                const w = Math.round(h * aspect);
+                return (
+                  <button
+                    key={d.key}
+                    onClick={() => setDevice(d.key)}
+                    className={`flex flex-col items-center gap-1 rounded-lg p-1.5 transition-colors ${isSelected ? 'bg-primary/10 ring-2 ring-primary' : 'hover:bg-accent/50'}`}
+                    aria-label={`Select ${d.label}`}
+                    aria-pressed={isSelected}
+                  >
+                    <div
+                      className={`flex items-center justify-center ${isSelected ? 'bg-primary/20 text-primary' : 'bg-accent text-muted-foreground'}`}
+                      style={{ width: `${w}px`, height: `${h}px`, borderRadius: info.radius > 0 ? '5px' : '2px' }}
+                    >
+                      <span className="text-[8px] font-medium">{d.label.replace('iPhone ', '').replace('iPad ', '')}</span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </section>
 
-          {/* Right: Controls */}
-          <aside className="flex flex-col gap-4 lg:w-2/5" aria-label="Studio settings">
-
-            {/* Background Section */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Background</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <Label htmlFor="bg-color">Color</Label>
-                  <input
-                    type="color"
-                    id="bg-color"
-                    value={bgColor}
-                    onChange={(e) => setBgColor(e.target.value)}
-                    className="h-8 w-12 cursor-pointer rounded border border-border"
-                    aria-label="Background color"
-                  />
-                  <span className="text-xs text-muted-foreground">{bgColor}</span>
-                </div>
-
+          {/* Right: Tools Panel */}
+          <aside
+            id="screenshot-settings-panel"
+            className={`sticky top-0 h-[calc(100vh-var(--header-height)-1px)] flex-col border-l border-border/50 bg-background overflow-y-auto transition-all duration-300 ease-in-out ${panelOpen ? 'flex w-72 min-w-72 opacity-100' : 'hidden w-0 min-w-0 opacity-0 pointer-events-none'}`}
+            aria-label="Screenshot settings"
+            aria-hidden={!panelOpen}
+          >
+            {/* ── BACKGROUND ── */}
+            <div className="border-b border-border/40 px-3 py-2.5">
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Background</h3>
+              <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="gradient-toggle">Gradient</Label>
+                  <span className="text-xs text-muted-foreground">Fill</span>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="color"
+                      id="bg-color"
+                      value={bgColor}
+                      onChange={(e) => setBgColor(e.target.value)}
+                      className="h-6 w-6 cursor-pointer rounded border border-border/60 p-0"
+                      aria-label="Background color"
+                    />
+                    <span className="font-mono text-[10px] text-muted-foreground/60">{bgColor}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Gradient</span>
                   <Switch
                     id="gradient-toggle"
                     checked={isGradient}
                     onCheckedChange={setIsGradient}
                     aria-label="Toggle gradient background"
+                    className="scale-75"
                   />
                 </div>
-
                 {isGradient && (
-                  <div className="flex flex-col gap-3 pl-2">
-                    <div className="flex items-center gap-3">
-                      <Label htmlFor="grad-start">Start</Label>
-                      <input
-                        type="color"
-                        id="grad-start"
-                        value={gradientStart}
-                        onChange={(e) => setGradientStart(e.target.value)}
-                        className="h-8 w-12 cursor-pointer rounded border border-border"
-                        aria-label="Gradient start color"
-                      />
-                      <span className="text-xs text-muted-foreground">{gradientStart}</span>
+                  <div className="flex flex-col gap-1.5 border-l-2 border-border/30 pl-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-muted-foreground/60">Start</span>
+                      <div className="flex items-center gap-1.5">
+                        <input type="color" id="grad-start" value={gradientStart} onChange={(e) => setGradientStart(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient start color" />
+                        <span className="font-mono text-[10px] text-muted-foreground/60">{gradientStart}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Label htmlFor="grad-end">End</Label>
-                      <input
-                        type="color"
-                        id="grad-end"
-                        value={gradientEnd}
-                        onChange={(e) => setGradientEnd(e.target.value)}
-                        className="h-8 w-12 cursor-pointer rounded border border-border"
-                        aria-label="Gradient end color"
-                      />
-                      <span className="text-xs text-muted-foreground">{gradientEnd}</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-muted-foreground/60">End</span>
+                      <div className="flex items-center gap-1.5">
+                        <input type="color" id="grad-end" value={gradientEnd} onChange={(e) => setGradientEnd(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Gradient end color" />
+                        <span className="font-mono text-[10px] text-muted-foreground/60">{gradientEnd}</span>
+                      </div>
                     </div>
-                    <div className="flex flex-col gap-1.5">
-                      <Label htmlFor="grad-direction">Direction</Label>
-                      <Select value={gradientDirection} onValueChange={setGradientDirection}>
-                        <SelectTrigger id="grad-direction" aria-label="Gradient direction">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {GRADIENT_DIRECTIONS.map((d) => (
-                            <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                    <Select value={gradientDirection} onValueChange={setGradientDirection}>
+                      <SelectTrigger id="grad-direction" className="h-7 text-xs" aria-label="Gradient direction">
+                        <SelectValue>{GRADIENT_DIRECTIONS.find((d) => d.value === gradientDirection)?.label || 'Top to Bottom'}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {GRADIENT_DIRECTIONS.map((d) => (
+                          <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="bg-upload">Background Image</Label>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => document.getElementById('bg-upload').click()}
-                      aria-label="Upload background image"
-                    >
-                      Upload Background
+                <div className="flex items-center gap-1.5">
+                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => document.getElementById('bg-upload').click()} aria-label="Upload background image">
+                    {bgImage ? 'Replace Image' : 'Upload Image'}
+                  </Button>
+                  {bgImage && (
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => setBgImage(null)} aria-label="Remove background image">
+                      Remove
                     </Button>
-                    {bgImage && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setBgImage(null)}
-                        aria-label="Remove background image"
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </div>
-                  <input
-                    type="file"
-                    id="bg-upload"
-                    accept="image/*"
-                    onChange={handleBgUpload}
-                    className="hidden"
-                    aria-label="Background image file input"
-                  />
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Text Section */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Text</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="text-line1">Line 1</Label>
+                <input type="file" id="bg-upload" accept="image/*" onChange={handleBgUpload} className="hidden" aria-label="Background image file input" />
+                <div className="flex items-center gap-1.5">
                   <Input
-                    id="text-line1"
-                    value={textLine1}
-                    onChange={(e) => setTextLine1(e.target.value)}
-                    placeholder="Track Your Fitness"
-                    aria-label="Marketing text line 1"
+                    id="ai-bg-prompt"
+                    value={aiPrompt}
+                    onChange={(e) => setAiPrompt(e.target.value)}
+                    placeholder="AI background prompt..."
+                    disabled={isGeneratingBg}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleGenerateBg(); }}
+                    aria-label="AI background description"
+                    className="h-7 text-xs"
                   />
+                  <Button variant="outline" size="sm" className="h-7 shrink-0 text-xs" onClick={handleGenerateBg} disabled={isGeneratingBg || !aiPrompt.trim()} aria-label="Generate AI background">
+                    {isGeneratingBg ? <Spinner className="h-3 w-3" /> : 'AI'}
+                  </Button>
                 </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="text-line2">Line 2</Label>
-                  <Input
-                    id="text-line2"
-                    value={textLine2}
-                    onChange={(e) => setTextLine2(e.target.value)}
-                    placeholder="Reach Your Goals"
-                    aria-label="Marketing text line 2"
-                  />
-                </div>
+              </div>
+            </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="text-position">Position</Label>
+            {/* ── TEXT ── */}
+            <div className="border-b border-border/40 px-3 py-2.5">
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Text</h3>
+              <div className="flex flex-col gap-2">
+                <Input id="text-line1" value={textLine1} onChange={(e) => setTextLine1(e.target.value)} placeholder="Headline" aria-label="Marketing text line 1" className="h-7 text-xs" />
+                <Input id="text-line2" value={textLine2} onChange={(e) => setTextLine2(e.target.value)} placeholder="Subheadline" aria-label="Marketing text line 2" className="h-7 text-xs" />
+                <div className="grid grid-cols-2 gap-1.5">
                   <Select value={textPosition} onValueChange={setTextPosition}>
-                    <SelectTrigger id="text-position" aria-label="Text position">
-                      <SelectValue />
+                    <SelectTrigger id="text-position" className="h-7 text-xs" aria-label="Text position">
+                      <SelectValue>{textPosition === 'top' ? 'Top' : 'Bottom'}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="top">Top</SelectItem>
                       <SelectItem value="bottom">Bottom</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="font-size">Font Size: {fontSize}px</Label>
-                  <Slider
-                    id="font-size"
-                    min={24}
-                    max={72}
-                    step={1}
-                    value={[fontSize]}
-                    onValueChange={(val) => setFontSize(val[0])}
-                    aria-label="Font size slider"
-                  />
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Label htmlFor="text-color">Color</Label>
-                  <input
-                    type="color"
-                    id="text-color"
-                    value={textColor}
-                    onChange={(e) => setTextColor(e.target.value)}
-                    className="h-8 w-12 cursor-pointer rounded border border-border"
-                    aria-label="Text color"
-                  />
-                  <span className="text-xs text-muted-foreground">{textColor}</span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="text-shadow-toggle">Text Shadow</Label>
-                  <Switch
-                    id="text-shadow-toggle"
-                    checked={textShadow}
-                    onCheckedChange={setTextShadow}
-                    aria-label="Toggle text shadow"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="font-weight">Font Weight</Label>
                   <Select value={fontWeight} onValueChange={setFontWeight}>
-                    <SelectTrigger id="font-weight" aria-label="Font weight">
-                      <SelectValue />
+                    <SelectTrigger id="font-weight" className="h-7 text-xs" aria-label="Font weight">
+                      <SelectValue>{fontWeight}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {WEIGHT_OPTIONS.map((w) => (
@@ -743,185 +706,131 @@ export default function StudioView() {
                     </SelectContent>
                   </Select>
                 </div>
-
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 text-[11px] text-muted-foreground/60">{fontSize}px</span>
+                  <Slider id="font-size" min={24} max={72} step={1} value={[fontSize]} onValueChange={(val) => setFontSize(val[0])} aria-label="Font size slider" className="flex-1" />
+                </div>
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="autofit-toggle">Auto-fit Text</Label>
-                  <Switch
-                    id="autofit-toggle"
-                    checked={autoFitText}
-                    onCheckedChange={setAutoFitText}
-                    aria-label="Toggle auto-fit text sizing"
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Templates Section */}
-            <TemplatePanel
-              currentState={{
-                bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
-                textColor, textShadow, fontWeight, textPosition, fontSize
-              }}
-              onLoadTemplate={handleLoadTemplate}
-              appId={selectedApp?.id}
-              selectedFont={selectedFont}
-              onFontChange={setSelectedFont}
-            />
-
-            {/* Device Section */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Device</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="device-select">Device Type</Label>
-                  <Select value={device} onValueChange={setDevice}>
-                    <SelectTrigger id="device-select" aria-label="Device type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEVICE_OPTIONS.map((d) => (
-                        <SelectItem key={d.key} value={d.key}>{d.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="bezel-toggle">Show Device Frame</Label>
-                  <Switch
-                    id="bezel-toggle"
-                    checked={showBezel}
-                    onCheckedChange={setShowBezel}
-                    aria-label="Toggle device frame bezel"
-                  />
-                </div>
-
-                <Separator />
-
-                <div className="flex flex-col gap-1.5">
-                  <Label>Screenshot</Label>
-                  <div
-                    className="flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border bg-accent/20 p-4 transition-colors hover:bg-accent/40"
-                    onClick={() => document.getElementById('screenshot-upload').click()}
-                    onDrop={handleDrop}
-                    onDragOver={(e) => e.preventDefault()}
-                    role="button"
-                    tabIndex={0}
-                    aria-label="Upload screenshot — click or drag and drop"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        document.getElementById('screenshot-upload').click();
-                      }
-                    }}
-                  >
-                    {screenshotImage ? (
-                      <p className="text-sm text-foreground">Screenshot loaded — click to replace</p>
-                    ) : (
-                      <>
-                        <p className="text-sm font-medium text-muted-foreground">Drop screenshot here</p>
-                        <p className="text-xs text-muted-foreground">or click to browse</p>
-                      </>
-                    )}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Color</span>
+                    <input type="color" id="text-color" value={textColor} onChange={(e) => setTextColor(e.target.value)} className="h-5 w-5 cursor-pointer rounded border border-border/60 p-0" aria-label="Text color" />
+                    <span className="font-mono text-[10px] text-muted-foreground/60">{textColor}</span>
                   </div>
-                  <input
-                    type="file"
-                    id="screenshot-upload"
-                    accept="image/*"
-                    onChange={handleScreenshotUpload}
-                    className="hidden"
-                    aria-label="Screenshot file input"
-                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground/60">Shadow</span>
+                    <Switch id="text-shadow-toggle" checked={textShadow} onCheckedChange={setTextShadow} aria-label="Toggle text shadow" className="scale-75" />
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Auto-fit</span>
+                  <Switch id="autofit-toggle" checked={autoFitText} onCheckedChange={setAutoFitText} aria-label="Toggle auto-fit text sizing" className="scale-75" />
+                </div>
+              </div>
+            </div>
 
-            {/* Localization Section */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Localization</CardTitle>
-                <CardDescription>
-                  Translate marketing text into all 28 App Store locales
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={handleTranslateAll}
-                    disabled={isTranslating || (!textLine1.trim() && !textLine2.trim())}
-                    aria-label="Translate text into all locales"
-                  >
+            {/* ── TEMPLATES & FONTS ── */}
+            <div className="border-b border-border/40">
+              <TemplatePanel
+                currentState={{
+                  bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
+                  textColor, textShadow, fontWeight, textPosition, fontSize
+                }}
+                onLoadTemplate={handleLoadTemplate}
+                appId={selectedApp?.id}
+                selectedFont={selectedFont}
+                onFontChange={setSelectedFont}
+              />
+            </div>
+
+            {/* ── DEVICE ── */}
+            <div className="border-b border-border/40 px-3 py-2.5">
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Device</h3>
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Frame</span>
+                  <Switch id="bezel-toggle" checked={showBezel} onCheckedChange={setShowBezel} aria-label="Toggle device frame bezel" className="scale-75" />
+                </div>
+                <div
+                  className="flex min-h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed border-border/60 bg-accent/10 p-2 transition-colors hover:bg-accent/30"
+                  onClick={() => document.getElementById('screenshot-upload').click()}
+                  onDrop={handleDrop}
+                  onDragOver={(e) => e.preventDefault()}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="Upload screenshot — click or drag and drop"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      document.getElementById('screenshot-upload').click();
+                    }
+                  }}
+                >
+                  {screenshotImage ? (
+                    <p className="text-[11px] text-foreground">Screenshot loaded — click to replace</p>
+                  ) : (
+                    <>
+                      <p className="text-[11px] font-medium text-muted-foreground">Drop screenshot here</p>
+                      <p className="text-[10px] text-muted-foreground/60">or click to browse</p>
+                    </>
+                  )}
+                </div>
+                <input type="file" id="screenshot-upload" accept="image/*" onChange={handleScreenshotUpload} className="hidden" aria-label="Screenshot file input" />
+              </div>
+            </div>
+
+            {/* ── LOCALIZATION ── */}
+            <div className="border-b border-border/40 px-3 py-2.5">
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Localization</h3>
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button size="sm" className="h-7 text-xs" onClick={handleTranslateAll} disabled={isTranslating || (!textLine1.trim() && !textLine2.trim())} aria-label="Translate text into all locales">
                     {isTranslating ? 'Translating...' : 'Translate All'}
                   </Button>
                   {hasTranslations && (
                     <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowTranslations(!showTranslations)}
-                        aria-label={showTranslations ? 'Hide translations table' : 'Show translations table'}
-                      >
+                      <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={() => setShowTranslations(!showTranslations)} aria-label={showTranslations ? 'Hide translations table' : 'Show translations table'}>
                         {showTranslations ? 'Hide' : 'Show'} ({Object.keys(translations).length})
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCopyAll}
-                        disabled={isTranslating}
-                        aria-label="Copy all translations as JSON"
-                      >
+                      <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleCopyAll} disabled={isTranslating} aria-label="Copy all translations as JSON">
                         Copy
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleExportTranslated}
-                        disabled={isTranslating}
-                        aria-label="Export all translated screenshots as PNGs"
-                      >
-                        Export Translated
+                      <Button variant="outline" size="sm" className="h-6 text-[10px]" onClick={handleExportTranslated} disabled={isTranslating} aria-label="Export all translated screenshots as PNGs">
+                        Export
                       </Button>
                     </>
                   )}
                 </div>
 
                 {hasTranslations && (
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="preview-locale">Preview Locale</Label>
-                    <Select value={previewLocale} onValueChange={setPreviewLocale}>
-                      <SelectTrigger id="preview-locale" aria-label="Preview locale on canvas">
-                        <SelectValue placeholder="Original" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="">Original</SelectItem>
-                        {LOCALES.map((l) => translations[l.code] ? (
-                          <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>
-                        ) : null)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <Select value={previewLocale} onValueChange={setPreviewLocale}>
+                    <SelectTrigger id="preview-locale" className="h-7 text-xs" aria-label="Preview locale on canvas">
+                      <SelectValue>{previewLocale === 'original' ? 'Original' : LOCALES.find((l) => l.code === previewLocale)?.name || 'Original'}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="original">Original</SelectItem>
+                      {LOCALES.map((l) => translations[l.code] ? (
+                        <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>
+                      ) : null)}
+                    </SelectContent>
+                  </Select>
                 )}
 
                 {isTranslating && (
-                  <div className="flex flex-col gap-1.5" role="status" aria-live="polite">
-                    <Progress value={translationProgress} aria-label="Translation progress" />
-                    <p className="text-xs text-muted-foreground">
-                      Translating... {translationProgress}%
-                    </p>
+                  <div className="flex flex-col gap-1" role="status" aria-live="polite">
+                    <Progress value={translationProgress} aria-label="Translation progress" className="h-1.5" />
+                    <p className="text-[10px] text-muted-foreground">{translationProgress}%</p>
                   </div>
                 )}
 
                 {showTranslations && hasTranslations && (
-                  <ScrollArea className="h-[400px] rounded-md border">
+                  <ScrollArea className="h-[300px] rounded border border-border/40">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="w-[140px]">Language</TableHead>
-                          <TableHead>Line 1</TableHead>
-                          <TableHead>Line 2</TableHead>
-                          <TableHead className="w-[90px]">Status</TableHead>
+                          <TableHead className="w-[100px] text-[10px]">Lang</TableHead>
+                          <TableHead className="text-[10px]">Line 1</TableHead>
+                          <TableHead className="text-[10px]">Line 2</TableHead>
+                          <TableHead className="w-[60px] text-[10px]">Status</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -929,32 +838,17 @@ export default function StudioView() {
                           const t = translations[locale.code];
                           if (!t) return null;
                           const { label, variant } = getStatusBadge(t.status);
-
                           return (
                             <TableRow key={locale.code}>
-                              <TableCell className="text-xs font-medium">
-                                {locale.name}
+                              <TableCell className="text-[10px] font-medium">{locale.name}</TableCell>
+                              <TableCell>
+                                <Input value={t.line1} onChange={(e) => handleCellEdit(locale.code, 'line1', e.target.value)} disabled={isTranslating} aria-label={`${locale.name} line 1 translation`} className="h-6 text-[10px]" />
                               </TableCell>
                               <TableCell>
-                                <Input
-                                  value={t.line1}
-                                  onChange={(e) => handleCellEdit(locale.code, 'line1', e.target.value)}
-                                  disabled={isTranslating}
-                                  aria-label={`${locale.name} line 1 translation`}
-                                  className="h-7 text-xs"
-                                />
+                                <Input value={t.line2} onChange={(e) => handleCellEdit(locale.code, 'line2', e.target.value)} disabled={isTranslating} aria-label={`${locale.name} line 2 translation`} className="h-6 text-[10px]" />
                               </TableCell>
                               <TableCell>
-                                <Input
-                                  value={t.line2}
-                                  onChange={(e) => handleCellEdit(locale.code, 'line2', e.target.value)}
-                                  disabled={isTranslating}
-                                  aria-label={`${locale.name} line 2 translation`}
-                                  className="h-7 text-xs"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={variant} className="text-xs">{label}</Badge>
+                                <Badge variant={variant} className="text-[9px]">{label}</Badge>
                               </TableCell>
                             </TableRow>
                           );
@@ -963,41 +857,30 @@ export default function StudioView() {
                     </Table>
                   </ScrollArea>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </div>
 
-            {/* Export Section */}
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Export</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                <Button onClick={handleExport} aria-label="Export composed screenshot as PNG">
+            {/* ── EXPORT ── */}
+            <div className="px-3 py-2.5">
+              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Export</h3>
+              <div className="flex flex-col gap-1.5">
+                <Button size="sm" className="h-7 text-xs" onClick={handleExport} aria-label="Export composed screenshot as PNG">
                   Export PNG
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowPreviewAll(true)}
-                  aria-label="Preview screenshot at all device sizes"
-                >
-                  Preview All Sizes
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowBatchExport(true)}
-                  disabled={!hasTranslations}
-                  aria-label="Open batch export dialog"
-                >
-                  Batch Export
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Output: {currentDevice.width} &times; {currentDevice.height}px
+                <div className="flex items-center gap-1.5">
+                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => setShowPreviewAll(true)} aria-label="Preview screenshot at all device sizes">
+                    Preview All
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => setShowBatchExport(true)} disabled={!hasTranslations} aria-label="Open batch export dialog">
+                    Batch Export
+                  </Button>
+                </div>
+                <p className="text-center text-[10px] text-muted-foreground/50">
+                  {currentDevice.width} &times; {currentDevice.height}px
                 </p>
-              </CardContent>
-            </Card>
-
+              </div>
+            </div>
           </aside>
-        </div>
       </div>
       )}
 
@@ -1015,8 +898,8 @@ export default function StudioView() {
                   <canvas
                     ref={(el) => {
                       if (!el || !showPreviewAll) return;
-                      const previewLine1 = previewLocale && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
-                      const previewLine2 = previewLocale && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
+                      const previewLine1 = previewLocale !== 'original' && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
+                      const previewLine2 = previewLocale !== 'original' && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
                       drawComposite(el, {
                         device: d.key, showBezel, screenshotImage,
                         textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
@@ -1051,6 +934,7 @@ export default function StudioView() {
         }}
         translations={translations}
         appName={selectedApp?.name}
+        appId={selectedApp?.id}
       />
     </>
   );

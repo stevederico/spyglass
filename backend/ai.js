@@ -6,6 +6,8 @@ import { Hono } from 'hono';
 
 const GROK_URL = 'https://api.x.ai/v1/chat/completions';
 const GROK_MODEL = 'grok-4.20-beta-latest-non-reasoning';
+const GROK_IMAGE_URL = 'https://api.x.ai/v1/images/generations';
+const GROK_IMAGE_MODEL = 'grok-imagine-image';
 
 const SYSTEM_PROMPTS = {
   metadata: `You are an expert App Store Optimization (ASO) specialist. Generate compelling, keyword-rich App Store metadata that maximizes discoverability and conversion. Follow Apple's guidelines strictly:
@@ -311,6 +313,70 @@ app.post('/ai/suggest-keywords', async (c) => {
     console.error('AI suggest-keywords error:', e.message);
     const status = e.message.includes('XAI_API_KEY') ? 503 : 500;
     return c.json({ error: e.message }, status);
+  }
+});
+
+/**
+ * POST /ai/generate-background - Generate a background image for App Store screenshots.
+ *
+ * Calls the xAI Grok image generation API to produce a clean, modern background
+ * suitable for overlaying text and device mockups.
+ *
+ * @param {Object} body - Request body
+ * @param {string} body.prompt - Description of the desired background image
+ * @returns {{ image: string }} Full data URI (data:image/png;base64,...) of the generated image
+ */
+app.post('/ai/generate-background', async (c) => {
+  try {
+    const { prompt } = await c.req.json();
+
+    if (!prompt) {
+      return c.json({ error: 'prompt is required' }, 400);
+    }
+
+    const apiKey = process.env.XAI_API_KEY;
+    if (!apiKey) {
+      return c.json({ error: 'XAI_API_KEY environment variable is not set' }, 503);
+    }
+
+    const fullPrompt = `Create a clean, modern background image suitable for an App Store screenshot. The image should be visually appealing but not too busy, as text and a device mockup will be overlaid on top. ${prompt}`;
+
+    const response = await fetch(GROK_IMAGE_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: GROK_IMAGE_MODEL,
+        prompt: fullPrompt,
+        n: 1,
+        aspect_ratio: '9:16',
+        response_format: 'b64_json'
+      })
+    });
+
+    if (response.status === 429) {
+      return c.json({ error: 'Rate limited by x.ai API. Please wait and try again.' }, 429);
+    }
+
+    if (!response.ok) {
+      const body = await response.text();
+      console.error('xAI image API error:', response.status, body);
+      return c.json({ error: `x.ai image API error ${response.status}` }, response.status >= 500 ? 502 : 400);
+    }
+
+    const data = await response.json();
+    const b64 = data.data?.[0]?.b64_json;
+
+    if (!b64) {
+      return c.json({ error: 'Empty image response from x.ai API' }, 502);
+    }
+
+    return c.json({ image: `data:image/png;base64,${b64}` });
+  } catch (e) {
+    console.error('AI generate-background error:', e.message);
+    return c.json({ error: e.message }, 500);
   }
 });
 

@@ -2,15 +2,16 @@
  * Batch export dialog for generating screenshots across multiple devices and locales
  *
  * Renders all combinations of selected devices and translated locales,
- * packages them into a zip file using fflate, and downloads the result.
+ * packages them and posts to the backend as an export package.
  *
  * @component
  * @param {Object} props
  * @param {boolean} props.open - Whether the sheet is open
  * @param {Function} props.onOpenChange - Callback to toggle sheet visibility
- * @param {Object} props.baseState - Current StudioView composer state
+ * @param {Object} props.baseState - Current screenshot composer state
  * @param {Object} props.translations - Map of locale code to { line1, line2, status }
- * @param {string} props.appName - App name for zip filename
+ * @param {string} props.appName - App name for the export package
+ * @param {string} props.appId - App identifier for the export package
  * @returns {JSX.Element} Batch export sheet
  */
 import { useState, useCallback } from 'react';
@@ -24,7 +25,6 @@ import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
 import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
 import { toast } from 'sonner';
 import { DEVICES, drawComposite } from './composerHelpers.js';
-import { zipSync } from 'fflate';
 
 /** All available device keys with labels */
 const DEVICE_ENTRIES = Object.entries(DEVICES).map(([key, dev]) => ({
@@ -66,7 +66,7 @@ function renderToBytes(state) {
   });
 }
 
-export default function BatchExportDialog({ open, onOpenChange, baseState, translations, appName }) {
+export default function BatchExportDialog({ open, onOpenChange, baseState, translations, appName, appId }) {
   const [selectedDevices, setSelectedDevices] = useState(
     new Set(DEVICE_ENTRIES.map((d) => d.key))
   );
@@ -119,7 +119,7 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
   const totalCombinations = selectedDevices.size * selectedLocales.size;
 
   /**
-   * Generate all screenshot combinations and download as zip
+   * Generate all screenshot combinations and post as an export package
    */
   const handleGenerate = useCallback(async () => {
     if (selectedDevices.size === 0 || selectedLocales.size === 0) {
@@ -162,28 +162,45 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
       position++;
     }
 
-    // Create zip
+    // Post export package to backend
     try {
-      const zipped = zipSync(files);
-      const blob = new Blob([zipped], { type: 'application/zip' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${appName || 'screenshots'}-export.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success(`Exported ${completed} screenshots`);
+      const formData = new FormData();
+      formData.append('appId', appId || '');
+      formData.append('appName', appName || 'Untitled');
+      formData.append('locales', JSON.stringify([...selectedLocales]));
+      formData.append('devices', JSON.stringify([...selectedDevices]));
+      formData.append('screenshotCount', String(completed));
+
+      // Append each screenshot as a file
+      for (const [filename, bytes] of Object.entries(files)) {
+        // filename is like "en-US/screenshot-1-iphone-67.png"
+        const parts = filename.split('/');
+        const locale = parts[0];
+        const fileBase = parts[parts.length - 1];
+        const deviceMatch = fileBase.match(/screenshot-\d+-(.+)\.png/);
+        const device = deviceMatch ? deviceMatch[1] : 'unknown';
+
+        const blob = new Blob([bytes], { type: 'image/png' });
+        formData.append(`file-${locale}-${device}`, blob, fileBase);
+      }
+
+      await fetch('/api/exports', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+
+      toast.success(`Export package created with ${completed} screenshots`);
+      onOpenChange(false);
     } catch (err) {
-      console.error('Zip creation failed:', err);
-      toast.error('Failed to create zip file');
+      console.error('Export package creation failed:', err);
+      toast.error('Failed to create export package');
     }
 
     setIsGenerating(false);
     setProgress(100);
     setProgressLabel('Complete');
-  }, [selectedDevices, selectedLocales, baseState, translations, appName]);
+  }, [selectedDevices, selectedLocales, baseState, translations, appName, appId, onOpenChange]);
 
   const translatedLocales = Object.entries(translations || {}).filter(
     ([, t]) => t.status !== 'error'

@@ -2,7 +2,7 @@
  * Application entry point for Spyglass - App Store Connect Screenshot & Metadata Manager
  *
  * Configures routing and initializes app with skateboard-ui framework.
- * Routes map to views for Studio and Exports. Settings override injects
+ * Routes map to views for Screenshots, Metadata, and Exports. Settings override injects
  * ASC credentials into the built-in SettingsView.
  *
  * @see {@link https://github.com/stevederico/skateboard|Skateboard Docs}
@@ -10,7 +10,7 @@
 import './assets/styles.css';
 import { createSkateboardApp } from '@stevederico/skateboard-ui/App';
 import constants from './constants.json';
-import StudioView from './components/StudioView.jsx';
+import ScreenshotsView from './components/ScreenshotsView.jsx';
 import ExportsView from './components/ExportsView.jsx';
 import MetadataView from './components/MetadataView.jsx';
 import SettingsView from './components/SettingsView.jsx';
@@ -22,7 +22,7 @@ import { AppProvider } from './components/AppContext.jsx';
  * @type {Array<{path: string, element: JSX.Element}>}
  */
 const appRoutes = [
-  { path: 'home', element: <StudioView /> },
+  { path: 'home', element: <ScreenshotsView /> },
   { path: 'metadata', element: <MetadataView /> },
   { path: 'exports', element: <ExportsView /> }
 ];

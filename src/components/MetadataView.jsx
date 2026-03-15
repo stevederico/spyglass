@@ -611,8 +611,40 @@ export default function MetadataView() {
 
   return (
     <>
-      <Header title="" className="[&>div>div:last-child]:ml-0">
+      <Header title="" className="[&>div>div:last-child]:ml-0 [&>div>div:last-child]:flex-1">
         <AppPicker />
+        <div className="flex-1" />
+        {selectedApp && (
+          <>
+            <Select value={selectedLocale} onValueChange={setSelectedLocale}>
+              <SelectTrigger className="h-8 w-48" aria-label="Select locale for metadata editing">
+                <SelectValue>{LOCALES.find((l) => l.code === selectedLocale)?.name || 'Select Locale'}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {LOCALES.map((locale) => (
+                  <SelectItem key={locale.code} value={locale.code}>
+                    {locale.name}
+                    {localizedMetadata[locale.code] ? '' : ' (empty)'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasChanges && (
+              <Badge variant="outline" className="text-yellow-600">Unsaved</Badge>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                handleFetchHistory();
+                setShowHistory(true);
+              }}
+              aria-label="View metadata version history"
+            >
+              History
+            </Button>
+          </>
+        )}
       </Header>
       {!selectedApp ? (
         <div className="flex flex-1 items-center justify-center">
@@ -621,44 +653,6 @@ export default function MetadataView() {
       ) : (
       <div className="flex flex-1 flex-col">
         <div className="flex flex-col gap-6 p-4 md:p-6">
-
-          {/* Locale Selector + Actions */}
-          <Card>
-            <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-end sm:flex-wrap">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="meta-locale-select">Locale</Label>
-                <Select value={selectedLocale} onValueChange={setSelectedLocale}>
-                  <SelectTrigger id="meta-locale-select" className="w-64" aria-label="Select locale for metadata editing">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LOCALES.map((locale) => (
-                      <SelectItem key={locale.code} value={locale.code}>
-                        {locale.name}
-                        {localizedMetadata[locale.code] ? '' : ' (empty)'}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    handleFetchHistory();
-                    setShowHistory(true);
-                  }}
-                  aria-label="View metadata version history"
-                >
-                  History
-                </Button>
-                {hasChanges && (
-                  <Badge variant="outline" className="text-yellow-600">Unsaved changes</Badge>
-                )}
-              </div>
-            </CardContent>
-          </Card>
 
           {/* AI Generation Card */}
           <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
@@ -1065,7 +1059,7 @@ export default function MetadataView() {
           <SheetHeader>
             <SheetTitle>Version History</SheetTitle>
           </SheetHeader>
-          <div className="mt-4 flex flex-col gap-3">
+          <div className="flex flex-col gap-3 px-6">
             {isLoadingHistory ? (
               <p className="text-sm text-muted-foreground" role="status">Loading history...</p>
             ) : historySnapshots.length === 0 ? (

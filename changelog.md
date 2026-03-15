@@ -2,6 +2,19 @@
 
 ## To-Do
 
+0.5.0
+
+  Add export packages backend
+  Add export package gallery
+  Rename StudioView ScreenshotsView
+  Move filter dropdowns header
+  Fix Select display values
+  Add export file storage
+  Add export zip download
+  Add export thumbnail preview
+  Remove Studio references
+  Update BatchExportDialog backend
+
 0.4.0
 
   Add auto-fit text sizing

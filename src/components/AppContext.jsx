@@ -2,7 +2,7 @@
  * Shared app context for managing the selected App Store Connect app
  *
  * Fetches apps from ASC on mount, persists the selected app to localStorage,
- * and provides selection state to all consuming components (Studio, Exports).
+ * and provides selection state to all consuming components (Screenshots, Metadata, Exports).
  *
  * @module AppContext
  */
