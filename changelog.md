@@ -1,11 +1,47 @@
 ## CHANGELOG
 
 ## To-Do
-- Template system
-- Batch export
-- Simulator capture improvements
-- Localized metadata editing
-- ASO keyword suggestions
+
+0.4.0
+
+  Add auto-fit text sizing
+  Add fitTextToBox composerHelper
+  Add renderForLocale composerHelper
+  Add locale preview dropdown
+  Add export translated screenshots
+  Add template CRUD backend
+  Add custom font upload backend
+  Add TemplatePanel component
+  Add starter template presets
+  Add custom font selector
+  Add fontFamily canvas support
+  Add BatchExportDialog component
+  Add fflate zip dependency
+  Add batch render all devices
+  Add drag-drop screenshot reorder
+  Add bulk select delete screenshots
+  Add SortableScreenshotCard component
+  Add preview all device sizes
+  Add dark light preview toggle
+  Add undo redo history hook
+  Add Cmd-Z keyboard shortcuts
+  Add localized metadata editing
+  Add per-locale metadata tabs
+  Add auto-translate metadata fields
+  Add keyword character limits
+  Add ASO keyword suggestions
+  Add keyword suggestion badges
+  Add diff view before save
+  Add metadata version history
+  Add metadata snapshot restore
+  Add metadata history backend
+  Add suggest-keywords AI route
+  Add auto-detect simulators route
+  Add multi-step screenshot capture
+  Add named screenshot filenames
+  Add auto-crop status bar
+  Add templates server mount
+  Add metadata history mount
 
 0.3.1
 

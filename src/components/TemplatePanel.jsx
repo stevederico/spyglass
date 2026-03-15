@@ -1,0 +1,404 @@
+/**
+ * Template management panel for saving and loading studio presets
+ *
+ * Displays saved templates for the current app with actions to load, duplicate,
+ * and delete. Provides a save dialog for creating new templates from current
+ * studio state. Includes font management with upload and selection of custom fonts.
+ * Seeds starter templates on first load when no templates exist for the app.
+ *
+ * @component
+ * @param {Object} props
+ * @param {Object} props.currentState - Current StudioView state to save as template
+ * @param {Function} props.onLoadTemplate - Callback to apply template settings
+ * @param {string} props.appId - Current app ID for filtering templates
+ * @param {string} props.selectedFont - Currently selected font family name
+ * @param {Function} props.onFontChange - Callback when font selection changes
+ * @returns {JSX.Element} Template management card
+ */
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
+import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
+import { Card, CardHeader, CardTitle, CardContent } from '@stevederico/skateboard-ui/shadcn/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
+import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
+import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
+import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
+import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
+import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
+import { toast } from 'sonner';
+import { STARTER_TEMPLATES } from './composerHelpers.js';
+
+export default function TemplatePanel({ currentState, onLoadTemplate, appId, selectedFont, onFontChange }) {
+  const [templates, setTemplates] = useState([]);
+  const [fonts, setFonts] = useState([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const fontInputRef = useRef(null);
+  const seededRef = useRef(new Set());
+
+  /**
+   * Fetch templates for the current app from the API
+   *
+   * @returns {Promise<Object[]>} Array of template objects
+   */
+  const fetchTemplates = useCallback(async () => {
+    if (!appId) return;
+    try {
+      const data = await apiRequest(`/templates?appId=${encodeURIComponent(appId)}`);
+      setTemplates(Array.isArray(data) ? data : []);
+      return data;
+    } catch (err) {
+      console.error('Failed to fetch templates:', err);
+      return [];
+    }
+  }, [appId]);
+
+  /** Fetch custom fonts from the API and load them via FontFace */
+  const fetchFonts = useCallback(async () => {
+    try {
+      const data = await apiRequest('/templates/fonts');
+      const fontList = Array.isArray(data) ? data : [];
+      setFonts(fontList);
+
+      // Load each font via FontFace API so canvas can render them
+      for (const font of fontList) {
+        const fontUrl = `/api/templates/fonts/${font.id}/file`;
+        try {
+          const face = new FontFace(font.name, `url(${fontUrl})`);
+          const loaded = await face.load();
+          document.fonts.add(loaded);
+        } catch {
+          // Font may already be loaded or file missing
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch fonts:', err);
+    }
+  }, []);
+
+  /**
+   * Seed starter templates for an app when none exist
+   *
+   * @param {string} id - App ID to seed templates for
+   */
+  const seedStarterTemplates = useCallback(async (id) => {
+    if (seededRef.current.has(id)) return;
+    seededRef.current.add(id);
+
+    for (const starter of STARTER_TEMPLATES) {
+      try {
+        await apiRequest('/templates', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: starter.name,
+            appId: id,
+            settings: starter.settings
+          })
+        });
+      } catch (err) {
+        console.error('Failed to seed template:', err);
+      }
+    }
+
+    await fetchTemplates();
+  }, [fetchTemplates]);
+
+  // Fetch templates and fonts when appId changes
+  useEffect(() => {
+    if (!appId) return;
+
+    (async () => {
+      const data = await fetchTemplates();
+      if (Array.isArray(data) && data.length === 0) {
+        await seedStarterTemplates(appId);
+      }
+    })();
+
+    fetchFonts();
+  }, [appId, fetchTemplates, fetchFonts, seedStarterTemplates]);
+
+  /** Save current studio state as a new template */
+  const handleSave = useCallback(async () => {
+    if (!templateName.trim()) {
+      toast.error('Enter a template name');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await apiRequest('/templates', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: templateName.trim(),
+          appId,
+          settings: currentState
+        })
+      });
+      toast.success('Template saved');
+      setIsDialogOpen(false);
+      setTemplateName('');
+      await fetchTemplates();
+    } catch (err) {
+      console.error('Failed to save template:', err);
+      toast.error('Failed to save template');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [templateName, appId, currentState, fetchTemplates]);
+
+  /**
+   * Duplicate a template
+   *
+   * @param {string} id - Template ID to duplicate
+   */
+  const handleDuplicate = useCallback(async (id) => {
+    try {
+      await apiRequest(`/templates/${id}/duplicate`, { method: 'POST' });
+      toast.success('Template duplicated');
+      await fetchTemplates();
+    } catch (err) {
+      console.error('Failed to duplicate template:', err);
+      toast.error('Failed to duplicate template');
+    }
+  }, [fetchTemplates]);
+
+  /**
+   * Delete a template
+   *
+   * @param {string} id - Template ID to delete
+   */
+  const handleDelete = useCallback(async (id) => {
+    try {
+      await apiRequest(`/templates/${id}`, { method: 'DELETE' });
+      toast.success('Template deleted');
+      await fetchTemplates();
+    } catch (err) {
+      console.error('Failed to delete template:', err);
+      toast.error('Failed to delete template');
+    }
+  }, [fetchTemplates]);
+
+  /**
+   * Handle custom font file upload
+   *
+   * @param {Event} e - File input change event
+   */
+  const handleFontUpload = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (!['ttf', 'otf'].includes(ext)) {
+      toast.error('Only TTF and OTF files are supported');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      await fetch('/api/templates/fonts', {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+      toast.success('Font uploaded');
+      await fetchFonts();
+    } catch (err) {
+      console.error('Failed to upload font:', err);
+      toast.error('Failed to upload font');
+    }
+
+    // Reset file input
+    if (fontInputRef.current) {
+      fontInputRef.current.value = '';
+    }
+  }, [fetchFonts]);
+
+  /**
+   * Delete a custom font
+   *
+   * @param {string} id - Font ID to delete
+   */
+  const handleDeleteFont = useCallback(async (id) => {
+    try {
+      await apiRequest(`/templates/fonts/${id}`, { method: 'DELETE' });
+      toast.success('Font deleted');
+      if (selectedFont) {
+        const deletedFont = fonts.find((f) => f.id === id);
+        if (deletedFont && deletedFont.name === selectedFont) {
+          onFontChange('');
+        }
+      }
+      await fetchFonts();
+    } catch (err) {
+      console.error('Failed to delete font:', err);
+      toast.error('Failed to delete font');
+    }
+  }, [fetchFonts, selectedFont, fonts, onFontChange]);
+
+  /** Check if a template is a starter preset by comparing its name */
+  const isStarterTemplate = useCallback((name) => {
+    return STARTER_TEMPLATES.some((s) => s.name === name);
+  }, []);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Templates</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {/* Save current state */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setIsDialogOpen(true)}
+          aria-label="Save current settings as a template"
+        >
+          Save Current
+        </Button>
+
+        {/* Template list */}
+        {templates.length > 0 && (
+          <ScrollArea className="max-h-[240px]">
+            <div className="flex flex-col gap-2">
+              {templates.map((template) => (
+                <div
+                  key={template.id}
+                  className="flex items-center justify-between gap-2 rounded-md border border-border p-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="truncate text-sm font-medium">{template.name}</span>
+                    <Badge variant={isStarterTemplate(template.name) ? 'secondary' : 'outline'} className="text-xs shrink-0">
+                      {isStarterTemplate(template.name) ? 'Starter' : 'Custom'}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onLoadTemplate(template.settings)}
+                      aria-label={`Load template ${template.name}`}
+                    >
+                      Load
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDuplicate(template.id)}
+                      aria-label={`Duplicate template ${template.name}`}
+                    >
+                      Copy
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDelete(template.id)}
+                      aria-label={`Delete template ${template.name}`}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        )}
+
+        <Separator />
+
+        {/* Font management */}
+        <div className="flex flex-col gap-3">
+          <Label htmlFor="font-family-select">Font Family</Label>
+          <Select value={selectedFont || 'system-default'} onValueChange={(val) => onFontChange(val === 'system-default' ? '' : val)}>
+            <SelectTrigger id="font-family-select" aria-label="Font family selection">
+              <SelectValue placeholder="System Default" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="system-default">System Default</SelectItem>
+              {fonts.map((font) => (
+                <SelectItem key={font.id} value={font.name}>{font.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => fontInputRef.current?.click()}
+              aria-label="Upload custom font file"
+            >
+              Upload Font
+            </Button>
+            <input
+              ref={fontInputRef}
+              type="file"
+              accept=".ttf,.otf"
+              onChange={handleFontUpload}
+              className="hidden"
+              aria-label="Font file input"
+            />
+          </div>
+
+          {fonts.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {fonts.map((font) => (
+                <Badge key={font.id} variant="outline" className="gap-1">
+                  {font.name}
+                  <button
+                    onClick={() => handleDeleteFont(font.id)}
+                    className="ml-1 text-muted-foreground hover:text-foreground"
+                    aria-label={`Delete font ${font.name}`}
+                  >
+                    &times;
+                  </button>
+                </Badge>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Save template dialog */}
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Save Template</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 py-4">
+              <Label htmlFor="template-name-input">Template Name</Label>
+              <Input
+                id="template-name-input"
+                value={templateName}
+                onChange={(e) => setTemplateName(e.target.value)}
+                placeholder="My Template"
+                aria-label="Template name"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSave();
+                }}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                aria-label="Cancel saving template"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={isSaving || !templateName.trim()}
+                aria-label="Confirm save template"
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+}

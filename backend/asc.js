@@ -20,6 +20,17 @@ import { dirname } from 'node:path';
 const ASC_BASE_URL = 'https://api.appstoreconnect.apple.com/v1';
 const TOKEN_EXPIRY = '20m';
 
+/** Status bar pixel heights by device name, used for auto-cropping screenshots. */
+const STATUS_BAR_HEIGHTS = {
+  'iPhone 16': 62, 'iPhone 16 Plus': 62, 'iPhone 16 Pro': 62, 'iPhone 16 Pro Max': 62,
+  'iPhone 15': 59, 'iPhone 15 Plus': 59, 'iPhone 15 Pro': 59, 'iPhone 15 Pro Max': 59,
+  'iPhone 14': 54, 'iPhone 14 Plus': 54, 'iPhone 14 Pro': 54, 'iPhone 14 Pro Max': 54,
+  'iPhone SE': 20, 'iPhone 8': 20, 'iPhone 8 Plus': 20
+};
+
+/** Default status bar height when device is not in the lookup map. */
+const DEFAULT_STATUS_BAR_HEIGHT = 54;
+
 const app = new Hono();
 
 // ============================================================
@@ -358,6 +369,48 @@ app.post('/asc/apps/:id/screenshots', async (c) => {
 });
 
 /**
+ * GET /asc/simulators - List available iOS simulators
+ *
+ * Queries Xcode CLI tools for all available simulator devices and returns
+ * a flat array with name, UDID, state, and runtime for each device.
+ *
+ * Returns 501 when DISABLE_SIMULATOR=true (e.g. on Linux hosting).
+ *
+ * @returns {Object} { simulators: Array<{ name: string, udid: string, state: string, runtime: string }> }
+ */
+app.get('/asc/simulators', async (c) => {
+  if (process.env.DISABLE_SIMULATOR === 'true') {
+    return c.json({
+      error: 'Simulator features are unavailable in this environment.'
+    }, 501);
+  }
+  try {
+    const { stdout } = await execAsync('xcrun simctl list devices available -j');
+    const parsed = JSON.parse(stdout);
+    const simulators = [];
+
+    for (const [runtime, deviceList] of Object.entries(parsed.devices)) {
+      // Extract readable runtime name from key like "com.apple.CoreSimulator.SimRuntime.iOS-17-5"
+      const runtimeName = runtime.replace('com.apple.CoreSimulator.SimRuntime.', '').replace(/-/g, '.');
+
+      for (const device of deviceList) {
+        simulators.push({
+          name: device.name,
+          udid: device.udid,
+          state: device.state,
+          runtime: runtimeName
+        });
+      }
+    }
+
+    return c.json({ simulators });
+  } catch (e) {
+    console.error('ASC simulators error:', e.message);
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+/**
  * DELETE /asc/screenshots/:id - Delete a screenshot from App Store Connect
  */
 app.delete('/asc/screenshots/:id', async (c) => {
@@ -372,16 +425,67 @@ app.delete('/asc/screenshots/:id', async (c) => {
 });
 
 /**
+ * Crop the status bar from a simulator screenshot using macOS sips.
+ *
+ * Reads the image dimensions, looks up the status bar height for the given
+ * device name, then crops in-place.
+ *
+ * @param {string} screenshotPath - Absolute path to the PNG file
+ * @param {string} simulatorName - Simulator device name (e.g. "iPhone 16 Pro")
+ * @returns {Promise<void>}
+ * @throws {Error} If sips commands fail
+ */
+async function cropStatusBar(screenshotPath, simulatorName) {
+  const barHeight = STATUS_BAR_HEIGHTS[simulatorName] ?? DEFAULT_STATUS_BAR_HEIGHT;
+
+  // Read image dimensions via sips
+  const { stdout: dimOutput } = await execAsync(
+    `sips -g pixelHeight -g pixelWidth "${screenshotPath}"`
+  );
+
+  const heightMatch = dimOutput.match(/pixelHeight:\s*(\d+)/);
+  const widthMatch = dimOutput.match(/pixelWidth:\s*(\d+)/);
+
+  if (!heightMatch || !widthMatch) {
+    throw new Error(`Could not read dimensions of ${screenshotPath}`);
+  }
+
+  const imgHeight = parseInt(heightMatch[1], 10);
+  const imgWidth = parseInt(widthMatch[1], 10);
+  const croppedHeight = imgHeight - barHeight;
+
+  if (croppedHeight <= 0) return;
+
+  await execAsync(
+    `sips --cropOffset ${barHeight} 0 --resampleHeightWidth ${croppedHeight} ${imgWidth} "${screenshotPath}"`
+  );
+}
+
+/**
  * POST /asc/screenshots/capture - Capture screenshots from iOS simulators
  *
  * Requires macOS with Xcode CLI tools. Disabled when DISABLE_SIMULATOR=true
  * (e.g. on Railway or other Linux hosting).
  *
- * Boots each specified simulator, launches the app, captures a screenshot,
- * then saves it to backend/screenshots/<bundleId>/<simulator>/.
+ * Boots each specified simulator, launches the app, captures one or more
+ * screenshots, then saves them to backend/screenshots/<bundleId>/<simulator>/.
  *
- * Expects JSON body: { bundleId: string, simulators: string[] }
- * @returns {Object} { screenshots: Array<{ simulator, path }> }
+ * Supports two modes:
+ * - **Single capture** (default): captures one screenshot per simulator.
+ *   Optionally accepts `name` for a custom filename.
+ * - **Multi-step capture**: when `steps` array is provided, captures a
+ *   screenshot for each step with a configurable delay between them.
+ *
+ * When `cropStatusBar` is true, the status bar is cropped from each screenshot
+ * using the macOS `sips` tool and a device-specific pixel height lookup.
+ *
+ * @param {Object} body - JSON request body
+ * @param {string} body.bundleId - iOS app bundle identifier
+ * @param {string[]} body.simulators - Array of simulator device names
+ * @param {string} [body.name] - Custom filename for single-capture mode
+ * @param {boolean} [body.cropStatusBar] - Whether to crop the status bar
+ * @param {Array<{ delay: number, name: string }>} [body.steps] - Multi-step capture sequence
+ * @returns {Object} { screenshots: Array<{ simulator, path } | { simulator, paths } | { simulator, error }> }
  */
 app.post('/asc/screenshots/capture', async (c) => {
   if (process.env.DISABLE_SIMULATOR === 'true') {
@@ -391,7 +495,7 @@ app.post('/asc/screenshots/capture', async (c) => {
   }
   try {
     const body = await c.req.json();
-    const { bundleId, simulators } = body;
+    const { bundleId, simulators, steps, name, cropStatusBar: shouldCrop } = body;
 
     if (!bundleId || !Array.isArray(simulators) || !simulators.length) {
       return c.json({ error: 'bundleId and simulators array are required' }, 400);
@@ -400,13 +504,15 @@ app.post('/asc/screenshots/capture', async (c) => {
     const screenshotsDir = path.resolve(__dirname, 'screenshots');
     const results = [];
 
+    // Fetch device list once instead of per-simulator
+    const { stdout: listOutput } = await execAsync(
+      'xcrun simctl list devices available -j'
+    );
+    const devices = JSON.parse(listOutput);
+
     for (const simulator of simulators) {
       try {
         // Find the device UDID by name
-        const { stdout: listOutput } = await execAsync(
-          'xcrun simctl list devices available -j'
-        );
-        const devices = JSON.parse(listOutput);
         let deviceUDID = null;
 
         for (const runtime of Object.values(devices.devices)) {
@@ -448,12 +554,43 @@ app.post('/asc/screenshots/capture', async (c) => {
         const outDir = path.join(screenshotsDir, bundleId, sanitizedName);
         await mkdir(outDir, { recursive: true });
 
-        // Capture screenshot
-        const timestamp = Date.now();
-        const screenshotPath = path.join(outDir, `screenshot_${timestamp}.png`);
-        await execAsync(`xcrun simctl io ${deviceUDID} screenshot "${screenshotPath}"`);
+        if (Array.isArray(steps) && steps.length) {
+          // Multi-step capture: take a screenshot for each step
+          const paths = [];
 
-        results.push({ simulator, path: screenshotPath });
+          for (const step of steps) {
+            // Wait the specified delay before capturing
+            const delay = step.delay ?? 0;
+            if (delay > 0) {
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+
+            const stepFileName = `${step.name ?? `step_${Date.now()}`}_${sanitizedName}.png`;
+            const screenshotPath = path.join(outDir, stepFileName);
+            await execAsync(`xcrun simctl io ${deviceUDID} screenshot "${screenshotPath}"`);
+
+            if (shouldCrop) {
+              await cropStatusBar(screenshotPath, simulator);
+            }
+
+            paths.push(screenshotPath);
+          }
+
+          results.push({ simulator, paths });
+        } else {
+          // Single capture mode
+          const fileName = name
+            ? `${name}_${sanitizedName}.png`
+            : `screenshot_${Date.now()}.png`;
+          const screenshotPath = path.join(outDir, fileName);
+          await execAsync(`xcrun simctl io ${deviceUDID} screenshot "${screenshotPath}"`);
+
+          if (shouldCrop) {
+            await cropStatusBar(screenshotPath, simulator);
+          }
+
+          results.push({ simulator, path: screenshotPath });
+        }
       } catch (simErr) {
         results.push({ simulator, error: simErr.message });
       }

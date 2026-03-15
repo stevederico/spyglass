@@ -13,6 +13,8 @@ import crypto from "crypto";
 import ascApp from './asc.js';
 import translateApp from './translate.js';
 import aiApp from './ai.js';
+import templatesApp from './templates.js';
+import metadataHistoryApp from './metadataHistory.js';
 import { databaseManager } from "./adapters/manager.js";
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1401,6 +1403,8 @@ app.route('/api', translateApp);
 
 // ==== AI METADATA GENERATION ====
 app.route('/api', aiApp);
+app.route('/api', templatesApp);
+app.route('/api', metadataHistoryApp);
 
 // ==== STATIC FILE SERVING (Production) ====
 // All /api/* routes are handled above. Everything else is static/SPA.

@@ -29,6 +29,106 @@ export const FONT_WEIGHTS = {
   Bold: '700'
 };
 
+/** Built-in starter template presets */
+export const STARTER_TEMPLATES = [
+  {
+    name: 'Minimal',
+    settings: {
+      bgColor: '#ffffff', isGradient: false, gradientStart: '#ffffff', gradientEnd: '#f0f0f0', gradientDirection: 'top-bottom',
+      textColor: '#000000', textShadow: false, fontWeight: 'Regular', textPosition: 'top', fontSize: 42
+    }
+  },
+  {
+    name: 'Bold',
+    settings: {
+      bgColor: '#1a1a2e', isGradient: true, gradientStart: '#1a1a2e', gradientEnd: '#16213e', gradientDirection: 'top-bottom',
+      textColor: '#ffffff', textShadow: true, fontWeight: 'Bold', textPosition: 'top', fontSize: 48
+    }
+  },
+  {
+    name: 'Gradient',
+    settings: {
+      bgColor: '#ff6b6b', isGradient: true, gradientStart: '#ff6b6b', gradientEnd: '#ffa502', gradientDirection: 'diagonal',
+      textColor: '#ffffff', textShadow: true, fontWeight: 'Bold', textPosition: 'bottom', fontSize: 46
+    }
+  }
+];
+
+/**
+ * Build the CSS font string with optional custom font family
+ *
+ * @param {string} fontWeight - CSS font weight value
+ * @param {number} fontSize - Font size in pixels
+ * @param {string} [fontFamily] - Optional custom font family name
+ * @returns {string} CSS font shorthand string
+ */
+function buildFontString(fontWeight, fontSize, fontFamily) {
+  return fontFamily
+    ? `${fontWeight} ${fontSize}px "${fontFamily}", -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif`
+    : `${fontWeight} ${fontSize}px -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif`;
+}
+
+/**
+ * Calculate the largest font size that fits text within given bounds
+ *
+ * Starts at initialFontSize and shrinks by 2px until text fits within
+ * maxWidth and maxHeight constraints. Floors at 16px minimum.
+ *
+ * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
+ * @param {string} text - Text to measure
+ * @param {number} maxWidth - Maximum width in pixels
+ * @param {number} maxHeight - Maximum height in pixels
+ * @param {number} initialFontSize - Starting font size in pixels
+ * @param {string} fontWeight - CSS font weight value
+ * @param {string} [fontFamily] - Optional custom font family name
+ * @returns {{ fontSize: number, lines: string[] }} Fitted font size and wrapped lines
+ */
+export function fitTextToBox(ctx, text, maxWidth, maxHeight, initialFontSize, fontWeight, fontFamily) {
+  const MIN_FONT_SIZE = 16;
+  let fontSize = initialFontSize;
+
+  while (fontSize > MIN_FONT_SIZE) {
+    ctx.font = buildFontString(fontWeight, fontSize, fontFamily);
+    const words = text.split(' ');
+    const lines = [];
+    let currentLine = '';
+
+    for (const word of words) {
+      const testLine = currentLine + word + ' ';
+      if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+        lines.push(currentLine.trim());
+        currentLine = word + ' ';
+      } else {
+        currentLine = testLine;
+      }
+    }
+    lines.push(currentLine.trim());
+
+    const totalHeight = lines.length * fontSize * 1.3;
+    if (totalHeight <= maxHeight) {
+      return { fontSize, lines };
+    }
+    fontSize -= 2;
+  }
+
+  // Floor: return at minimum size
+  ctx.font = buildFontString(fontWeight, MIN_FONT_SIZE, fontFamily);
+  const words = text.split(' ');
+  const lines = [];
+  let currentLine = '';
+  for (const word of words) {
+    const testLine = currentLine + word + ' ';
+    if (ctx.measureText(testLine).width > maxWidth && currentLine) {
+      lines.push(currentLine.trim());
+      currentLine = word + ' ';
+    } else {
+      currentLine = testLine;
+    }
+  }
+  lines.push(currentLine.trim());
+  return { fontSize: MIN_FONT_SIZE, lines };
+}
+
 /**
  * Draw a rounded rectangle path on the canvas context
  *
@@ -105,9 +205,6 @@ export function drawBackground(ctx, w, h, settings) {
 /**
  * Draw the device frame bezel and clip the screen area
  *
- * Draws an outer dark rounded rectangle simulating a device bezel,
- * then clips to the inner screen area for screenshot rendering.
- *
  * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
  * @param {number} x - Screen area top-left x
  * @param {number} y - Screen area top-left y
@@ -121,7 +218,6 @@ export function drawDeviceFrame(ctx, x, y, w, h, radius, bezelWidth) {
   drawRoundedRect(ctx, x - bezelWidth, y - bezelWidth, w + bezelWidth * 2, h + bezelWidth * 2, radius + bezelWidth);
   ctx.fill();
 
-  // Clip to inner screen
   drawRoundedRect(ctx, x, y, w, h, radius);
   ctx.clip();
 }
@@ -129,8 +225,9 @@ export function drawDeviceFrame(ctx, x, y, w, h, radius, bezelWidth) {
 /**
  * Draw word-wrapped marketing text with optional drop shadow
  *
- * Renders one or two lines of centered text at the specified position,
- * automatically wrapping words that exceed maxWidth.
+ * Renders centered text at the specified position, automatically wrapping
+ * words that exceed maxWidth. When maxHeight is provided, uses fitTextToBox
+ * to auto-shrink font size. Supports custom font families.
  *
  * @param {CanvasRenderingContext2D} ctx - Canvas 2D rendering context
  * @param {string} text - Text content to render
@@ -141,11 +238,12 @@ export function drawDeviceFrame(ctx, x, y, w, h, radius, bezelWidth) {
  * @param {string} color - Text fill color
  * @param {boolean} hasShadow - Whether to apply drop shadow
  * @param {string} fontWeight - CSS font weight value ("300", "400", or "700")
+ * @param {number} [maxHeight] - Optional max height to auto-fit text into
+ * @param {string} [fontFamily] - Optional custom font family name
  */
-export function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, hasShadow, fontWeight) {
+export function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, hasShadow, fontWeight, maxHeight, fontFamily) {
   if (!text) return;
 
-  ctx.font = `${fontWeight} ${fontSize}px -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif`;
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
 
@@ -156,23 +254,33 @@ export function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, ha
     ctx.shadowOffsetY = 4;
   }
 
-  const words = text.split(' ');
-  let line = '';
-  let lineY = y;
-
-  for (const word of words) {
-    const testLine = line + word + ' ';
-    if (ctx.measureText(testLine).width > maxWidth && line) {
-      ctx.fillText(line.trim(), x, lineY);
-      line = word + ' ';
-      lineY += fontSize * 1.3;
-    } else {
-      line = testLine;
+  if (maxHeight) {
+    const { fontSize: fittedSize, lines } = fitTextToBox(ctx, text, maxWidth, maxHeight, fontSize, fontWeight, fontFamily);
+    ctx.font = buildFontString(fontWeight, fittedSize, fontFamily);
+    let lineY = y;
+    for (const line of lines) {
+      ctx.fillText(line, x, lineY);
+      lineY += fittedSize * 1.3;
     }
-  }
-  ctx.fillText(line.trim(), x, lineY);
+  } else {
+    ctx.font = buildFontString(fontWeight, fontSize, fontFamily);
+    const words = text.split(' ');
+    let line = '';
+    let lineY = y;
 
-  // Reset shadow
+    for (const word of words) {
+      const testLine = line + word + ' ';
+      if (ctx.measureText(testLine).width > maxWidth && line) {
+        ctx.fillText(line.trim(), x, lineY);
+        line = word + ' ';
+        lineY += fontSize * 1.3;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line.trim(), x, lineY);
+  }
+
   ctx.shadowColor = 'transparent';
   ctx.shadowBlur = 0;
   ctx.shadowOffsetX = 0;
@@ -203,6 +311,8 @@ export function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, ha
  * @param {string} state.gradientEnd - Gradient end color
  * @param {string} state.gradientDirection - Gradient direction
  * @param {HTMLImageElement|null} state.bgImage - Background image element
+ * @param {boolean} [state.autoFitText=true] - Whether to auto-shrink text to fit
+ * @param {string} [state.fontFamily] - Optional custom font family name
  */
 export function drawComposite(canvas, state) {
   const ctx = canvas.getContext('2d');
@@ -213,7 +323,6 @@ export function drawComposite(canvas, state) {
   canvas.height = ch;
   ctx.clearRect(0, 0, cw, ch);
 
-  // 1. Background
   drawBackground(ctx, cw, ch, {
     bgColor: state.bgColor,
     isGradient: state.isGradient,
@@ -223,7 +332,6 @@ export function drawComposite(canvas, state) {
     bgImage: state.bgImage
   });
 
-  // Calculate device frame area — centered, with padding for text
   const padding = ch * 0.12;
   const textAreaHeight = ch * 0.15;
   const isTop = state.textPosition === 'top';
@@ -237,17 +345,14 @@ export function drawComposite(canvas, state) {
   const scaledRadius = deviceInfo.radius * screenScale;
   const scaledBezel = deviceInfo.bezelWidth * screenScale;
 
-  // 2. Device frame
   ctx.save();
   if (state.showBezel) {
     drawDeviceFrame(ctx, frameX, frameY, frameW, frameH, scaledRadius, scaledBezel);
   } else {
-    // Still clip to rounded screen shape
     drawRoundedRect(ctx, frameX, frameY, frameW, frameH, scaledRadius);
     ctx.clip();
   }
 
-  // 3. Screenshot
   if (state.screenshotImage) {
     ctx.drawImage(state.screenshotImage, frameX, frameY, frameW, frameH);
   } else {
@@ -256,30 +361,50 @@ export function drawComposite(canvas, state) {
   }
   ctx.restore();
 
-  // 4. Marketing text
   const textMaxWidth = cw * 0.8;
   const weightValue = FONT_WEIGHTS[state.fontWeight] || '700';
   const scaledFontSize = state.fontSize * (cw / 1290);
+  const autoFitMaxHeight = state.autoFitText !== false ? textAreaHeight : undefined;
+  const fontFamily = state.fontFamily || '';
 
   if (isTop) {
     const textY1 = padding * 0.6;
-    drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue);
+    drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     if (state.textLine2) {
-      drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue);
+      drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
   } else {
     const textY1 = frameY + frameH + padding * 0.5;
-    drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue);
+    drawMarketingText(ctx, state.textLine1, cw / 2, textY1, textMaxWidth, scaledFontSize, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     if (state.textLine2) {
-      drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue);
+      drawMarketingText(ctx, state.textLine2, cw / 2, textY1 + scaledFontSize * 1.4, textMaxWidth, scaledFontSize * 0.75, state.textColor, state.textShadow, weightValue, autoFitMaxHeight, fontFamily);
     }
   }
 }
 
 /**
- * Export the canvas content as a PNG file download
+ * Render a composite image with locale-specific text
  *
- * Uses canvas.toBlob() to generate the PNG and triggers a browser download.
+ * Creates an offscreen canvas, calls drawComposite with translated text,
+ * and returns the result as a PNG Blob.
+ *
+ * @param {HTMLCanvasElement} referenceCanvas - Canvas for dimension reference
+ * @param {Object} baseState - Base composer state
+ * @param {string} localeCode - Locale code for filename
+ * @param {string} line1 - Translated line 1 text
+ * @param {string} line2 - Translated line 2 text
+ * @returns {Promise<Blob>} PNG blob of the rendered composition
+ */
+export function renderForLocale(referenceCanvas, baseState, localeCode, line1, line2) {
+  return new Promise((resolve) => {
+    const offscreen = document.createElement('canvas');
+    drawComposite(offscreen, { ...baseState, textLine1: line1, textLine2: line2 });
+    offscreen.toBlob((blob) => resolve(blob), 'image/png');
+  });
+}
+
+/**
+ * Export the canvas content as a PNG file download
  *
  * @param {HTMLCanvasElement} canvas - Canvas element to export
  * @param {string} deviceKey - Device key for filename

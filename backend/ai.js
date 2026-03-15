@@ -33,7 +33,18 @@ Respond with ONLY the release notes text. No JSON, no code fences.`,
 
   improveText: `You are an expert App Store copywriter. Improve the given text to be more compelling, clear, and optimized for the App Store. Maintain the same approximate length. Focus on user benefits and emotional hooks.
 
-Respond with ONLY the improved text. No JSON, no code fences.`
+Respond with ONLY the improved text. No JSON, no code fences.`,
+
+  suggestKeywords: `You are an ASO keyword research expert. Analyze the app and suggest ranked keyword opportunities with estimated search volume. Rules:
+- Suggest 10-15 keywords or short phrases
+- Rank by relevance and search volume
+- Label each as "high", "med", or "low" volume
+- Don't repeat words already in the app name
+- Include a mix of head terms and long-tail phrases
+- No trademarked terms
+- Consider the target locale for language-appropriate suggestions
+
+Respond ONLY with valid JSON: { "suggestions": [{ "keyword": "...", "volume": "high|med|low" }, ...] }. No markdown, no code fences.`
 };
 
 const app = new Hono();
@@ -261,6 +272,43 @@ app.post('/ai/improve-text', async (c) => {
     return c.json({ improved });
   } catch (e) {
     console.error('AI improve-text error:', e.message);
+    const status = e.message.includes('XAI_API_KEY') ? 503 : 500;
+    return c.json({ error: e.message }, status);
+  }
+});
+
+/**
+ * POST /ai/suggest-keywords - Get ranked keyword suggestions with volume estimates.
+ *
+ * Analyzes the app and returns keyword opportunities ranked by relevance
+ * with estimated search volume labels (high/med/low).
+ *
+ * @param {Object} body - Request body
+ * @param {string} body.appName - App name (required)
+ * @param {string} [body.description] - App description for context
+ * @param {string} [body.locale] - Target locale (e.g. "en-US")
+ * @param {string} [body.currentKeywords] - Existing keywords to avoid duplicates
+ * @returns {{ suggestions: Array<{ keyword: string, volume: "high"|"med"|"low" }> }}
+ */
+app.post('/ai/suggest-keywords', async (c) => {
+  try {
+    const { appName, description, locale, currentKeywords } = await c.req.json();
+
+    if (!appName) {
+      return c.json({ error: 'appName is required' }, 400);
+    }
+
+    let userPrompt = `Suggest keyword opportunities for the app "${appName}".`;
+    if (description) userPrompt += ` Description: ${description}`;
+    if (locale) userPrompt += ` Target locale: ${locale}`;
+    if (currentKeywords) userPrompt += ` Current keywords (avoid duplicates): ${currentKeywords}`;
+
+    const raw = await callGrok(SYSTEM_PROMPTS.suggestKeywords, userPrompt);
+    const result = safeParseJSON(raw);
+
+    return c.json(result);
+  } catch (e) {
+    console.error('AI suggest-keywords error:', e.message);
     const status = e.message.includes('XAI_API_KEY') ? 503 : 500;
     return c.json({ error: e.message }, status);
   }

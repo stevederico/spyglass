@@ -4,7 +4,8 @@
  * Provides a canvas-based editor that layers background, device frame,
  * screenshot, and marketing text. Left panel shows a live preview,
  * right panel provides controls for all settings including batch
- * translation into all 28 App Store Connect locales.
+ * translation into all 28 App Store Connect locales. Supports undo/redo,
+ * template management, custom fonts, batch export, and preview-all-sizes.
  *
  * @component
  * @returns {JSX.Element} Screenshot studio interface
@@ -24,10 +25,14 @@ import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
 import { Progress } from '@stevederico/skateboard-ui/shadcn/ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@stevederico/skateboard-ui/shadcn/ui/table';
 import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
 import { toast } from 'sonner';
-import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG } from './composerHelpers.js';
+import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG, renderForLocale } from './composerHelpers.js';
 import { useApp } from './AppContext.jsx';
 import AppPicker from './AppPicker.jsx';
+import TemplatePanel from './TemplatePanel.jsx';
+import BatchExportDialog from './BatchExportDialog.jsx';
+import { useHistory } from './useHistory.js';
 
 /** Device key options for the device select dropdown */
 const DEVICE_OPTIONS = Object.entries(DEVICES).map(([key, val]) => ({
@@ -80,6 +85,9 @@ const LOCALES = [
 /** Locale codes that use English source text directly */
 const ENGLISH_LOCALES = new Set(['en-US', 'en-GB', 'en-AU', 'en-CA']);
 
+/** Debounce delay for pushing state to undo history (ms) */
+const HISTORY_DEBOUNCE_MS = 500;
+
 /**
  * Return Badge variant and label for a translation status
  *
@@ -121,6 +129,10 @@ export default function StudioView() {
   const [textColor, setTextColor] = useState('#ffffff');
   const [textShadow, setTextShadow] = useState(true);
   const [fontWeight, setFontWeight] = useState('Bold');
+  const [autoFitText, setAutoFitText] = useState(true);
+
+  // Font state (from templates)
+  const [selectedFont, setSelectedFont] = useState('');
 
   // Device state
   const [device, setDevice] = useState('iphone-67');
@@ -132,9 +144,83 @@ export default function StudioView() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationProgress, setTranslationProgress] = useState(0);
   const [showTranslations, setShowTranslations] = useState(false);
+  const [previewLocale, setPreviewLocale] = useState('');
+
+  // QoL state
+  const [showPreviewAll, setShowPreviewAll] = useState(false);
+  const [canvasBgMode, setCanvasBgMode] = useState('light');
+
+  // Batch export state
+  const [showBatchExport, setShowBatchExport] = useState(false);
+
+  // Undo/redo history
+  const isRestoringRef = useRef(false);
+  const { currentState: historyState, pushState, undo, redo, canUndo, canRedo } = useHistory({
+    bgColor: '#1a1a2e', isGradient: false, gradientStart: '#1a1a2e', gradientEnd: '#16213e',
+    gradientDirection: 'top-bottom', textLine1: 'Track Your Fitness', textLine2: 'Reach Your Goals',
+    textPosition: 'top', fontSize: 42, textColor: '#ffffff', textShadow: true, fontWeight: 'Bold',
+    autoFitText: true, device: 'iphone-67', showBezel: true, selectedFont: ''
+  });
 
   const currentDevice = DEVICES[device];
   const hasTranslations = Object.keys(translations).length > 0;
+
+  // Push current settings to history (debounced, skip during restore)
+  useEffect(() => {
+    if (isRestoringRef.current) return;
+    const timer = setTimeout(() => {
+      pushState({
+        bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
+        textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
+        autoFitText, device, showBezel, selectedFont
+      });
+    }, HISTORY_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [
+    bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
+    textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
+    autoFitText, device, showBezel, selectedFont, pushState
+  ]);
+
+  // Restore state from history on undo/redo
+  useEffect(() => {
+    if (!historyState) return;
+    isRestoringRef.current = true;
+    setBgColor(historyState.bgColor);
+    setIsGradient(historyState.isGradient);
+    setGradientStart(historyState.gradientStart);
+    setGradientEnd(historyState.gradientEnd);
+    setGradientDirection(historyState.gradientDirection);
+    setTextLine1(historyState.textLine1);
+    setTextLine2(historyState.textLine2);
+    setTextPosition(historyState.textPosition);
+    setFontSize(historyState.fontSize);
+    setTextColor(historyState.textColor);
+    setTextShadow(historyState.textShadow);
+    setFontWeight(historyState.fontWeight);
+    setAutoFitText(historyState.autoFitText);
+    setDevice(historyState.device);
+    setShowBezel(historyState.showBezel);
+    setSelectedFont(historyState.selectedFont || '');
+    // Allow next tick before re-enabling history push
+    requestAnimationFrame(() => { isRestoringRef.current = false; });
+  }, [historyState]);
+
+  // Keyboard shortcuts for undo/redo (Cmd+Z, Cmd+Shift+Z)
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   /**
    * Load an image file from a File object
@@ -214,6 +300,26 @@ export default function StudioView() {
     exportCanvasPNG(canvas, device);
     toast.success('Screenshot exported');
   }
+
+  /**
+   * Apply template settings to current studio state
+   *
+   * @param {Object} settings - Template settings object
+   */
+  const handleLoadTemplate = useCallback((settings) => {
+    if (!settings) return;
+    if (settings.bgColor !== undefined) setBgColor(settings.bgColor);
+    if (settings.isGradient !== undefined) setIsGradient(settings.isGradient);
+    if (settings.gradientStart !== undefined) setGradientStart(settings.gradientStart);
+    if (settings.gradientEnd !== undefined) setGradientEnd(settings.gradientEnd);
+    if (settings.gradientDirection !== undefined) setGradientDirection(settings.gradientDirection);
+    if (settings.textColor !== undefined) setTextColor(settings.textColor);
+    if (settings.textShadow !== undefined) setTextShadow(settings.textShadow);
+    if (settings.fontWeight !== undefined) setFontWeight(settings.fontWeight);
+    if (settings.textPosition !== undefined) setTextPosition(settings.textPosition);
+    if (settings.fontSize !== undefined) setFontSize(settings.fontSize);
+    toast.success('Template loaded');
+  }, []);
 
   /**
    * Translate current text lines into all App Store locales
@@ -322,21 +428,66 @@ export default function StudioView() {
     }
   }, [translations, hasTranslations]);
 
+  /**
+   * Export translated screenshots as individual PNG downloads
+   *
+   * Iterates all translated locales, renders each with locale-specific
+   * text via an offscreen canvas, and triggers a file download per locale.
+   */
+  const handleExportTranslated = useCallback(async () => {
+    if (!hasTranslations) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const baseState = {
+      device, showBezel, screenshotImage,
+      textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
+      bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
+      autoFitText, fontFamily: selectedFont
+    };
+
+    for (const locale of LOCALES) {
+      const t = translations[locale.code];
+      if (!t || t.status === 'error') continue;
+
+      const blob = await renderForLocale(canvas, baseState, locale.code, t.line1, t.line2);
+      if (!blob) continue;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `screenshot-${locale.code}-${device}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+    toast.success('Translated screenshots exported');
+  }, [translations, hasTranslations, device, showBezel, screenshotImage, textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight, bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage, autoFitText, selectedFont]);
+
   // Redraw canvas whenever any setting changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    const previewLine1 = previewLocale && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
+    const previewLine2 = previewLocale && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
+
     drawComposite(canvas, {
       device, showBezel, screenshotImage,
-      textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
-      bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage
+      textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
+      bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
+      autoFitText, fontFamily: selectedFont
     });
   }, [
     device, showBezel, screenshotImage,
     textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
-    bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage
+    bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
+    autoFitText, selectedFont, previewLocale, translations
   ]);
+
+  /** Canvas container background class based on preview mode */
+  const canvasBgClass = canvasBgMode === 'dark' ? 'bg-zinc-900' : 'bg-accent/30';
 
   return (
     <>
@@ -353,7 +504,7 @@ export default function StudioView() {
 
           {/* Left: Canvas Preview */}
           <section className="flex flex-col items-center gap-3 lg:w-3/5" aria-label="Screenshot preview">
-            <div className="w-full max-w-md rounded-lg border border-border bg-accent/30 p-4">
+            <div className={`w-full max-w-md rounded-lg border border-border p-4 ${canvasBgClass}`}>
               <canvas
                 ref={canvasRef}
                 style={{ width: '100%', height: 'auto', borderRadius: '8px' }}
@@ -363,6 +514,36 @@ export default function StudioView() {
             <p className="text-sm text-muted-foreground">
               {currentDevice.width} &times; {currentDevice.height}px &mdash; {currentDevice.label}
             </p>
+
+            {/* Undo / Redo / Dark Preview controls */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={undo}
+                disabled={!canUndo}
+                aria-label="Undo last change"
+              >
+                Undo
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={redo}
+                disabled={!canRedo}
+                aria-label="Redo last change"
+              >
+                Redo
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCanvasBgMode(canvasBgMode === 'light' ? 'dark' : 'light')}
+                aria-label={canvasBgMode === 'light' ? 'Switch to dark preview background' : 'Switch to light preview background'}
+              >
+                {canvasBgMode === 'light' ? 'Dark Preview' : 'Light Preview'}
+              </Button>
+            </div>
           </section>
 
           {/* Right: Controls */}
@@ -562,8 +743,30 @@ export default function StudioView() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="autofit-toggle">Auto-fit Text</Label>
+                  <Switch
+                    id="autofit-toggle"
+                    checked={autoFitText}
+                    onCheckedChange={setAutoFitText}
+                    aria-label="Toggle auto-fit text sizing"
+                  />
+                </div>
               </CardContent>
             </Card>
+
+            {/* Templates Section */}
+            <TemplatePanel
+              currentState={{
+                bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
+                textColor, textShadow, fontWeight, textPosition, fontSize
+              }}
+              onLoadTemplate={handleLoadTemplate}
+              appId={selectedApp?.id}
+              selectedFont={selectedFont}
+              onFontChange={setSelectedFont}
+            />
 
             {/* Device Section */}
             <Card>
@@ -671,9 +874,35 @@ export default function StudioView() {
                       >
                         Copy
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExportTranslated}
+                        disabled={isTranslating}
+                        aria-label="Export all translated screenshots as PNGs"
+                      >
+                        Export Translated
+                      </Button>
                     </>
                   )}
                 </div>
+
+                {hasTranslations && (
+                  <div className="flex flex-col gap-1.5">
+                    <Label htmlFor="preview-locale">Preview Locale</Label>
+                    <Select value={previewLocale} onValueChange={setPreviewLocale}>
+                      <SelectTrigger id="preview-locale" aria-label="Preview locale on canvas">
+                        <SelectValue placeholder="Original" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">Original</SelectItem>
+                        {LOCALES.map((l) => translations[l.code] ? (
+                          <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>
+                        ) : null)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {isTranslating && (
                   <div className="flex flex-col gap-1.5" role="status" aria-live="polite">
@@ -746,6 +975,21 @@ export default function StudioView() {
                 <Button onClick={handleExport} aria-label="Export composed screenshot as PNG">
                   Export PNG
                 </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowPreviewAll(true)}
+                  aria-label="Preview screenshot at all device sizes"
+                >
+                  Preview All Sizes
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowBatchExport(true)}
+                  disabled={!hasTranslations}
+                  aria-label="Open batch export dialog"
+                >
+                  Batch Export
+                </Button>
                 <p className="text-xs text-muted-foreground">
                   Output: {currentDevice.width} &times; {currentDevice.height}px
                 </p>
@@ -756,6 +1000,58 @@ export default function StudioView() {
         </div>
       </div>
       )}
+
+      {/* Preview All Sizes Dialog */}
+      <Dialog open={showPreviewAll} onOpenChange={setShowPreviewAll}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Preview All Sizes</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            {DEVICE_OPTIONS.map((d) => {
+              const dev = DEVICES[d.key];
+              return (
+                <div key={d.key} className="flex flex-col items-center gap-1">
+                  <canvas
+                    ref={(el) => {
+                      if (!el || !showPreviewAll) return;
+                      const previewLine1 = previewLocale && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
+                      const previewLine2 = previewLocale && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
+                      drawComposite(el, {
+                        device: d.key, showBezel, screenshotImage,
+                        textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
+                        bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
+                        autoFitText, fontFamily: selectedFont
+                      });
+                    }}
+                    style={{ width: '100%', height: 'auto', borderRadius: '4px' }}
+                    aria-label={`Preview for ${d.label}`}
+                  />
+                  <p className="text-xs text-muted-foreground text-center">
+                    {d.label}
+                    <br />
+                    {dev.width}x{dev.height}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Batch Export Dialog */}
+      <BatchExportDialog
+        open={showBatchExport}
+        onOpenChange={setShowBatchExport}
+        baseState={{
+          device, showBezel, screenshotImage,
+          textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
+          bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
+          autoFitText, fontFamily: selectedFont
+        }}
+        translations={translations}
+        appName={selectedApp?.name}
+      />
     </>
   );
 }

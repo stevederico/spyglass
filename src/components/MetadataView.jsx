@@ -1,14 +1,14 @@
 /**
  * Metadata editing view with AI-powered generation via x.ai Grok
  *
- * Provides an editable form for App Store Connect localized listings
+ * Provides a locale-tabbed form for App Store Connect localized listings
  * with character counts, per-field AI generation, bulk generation,
- * and text improvement capabilities.
+ * auto-translation, keyword suggestions, diff preview, and version history.
  *
  * @component
  * @returns {JSX.Element} Metadata management interface
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Header from '@stevederico/skateboard-ui/Header';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
@@ -19,6 +19,11 @@ import { Textarea } from '@stevederico/skateboard-ui/shadcn/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
 import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
 import { Spinner } from '@stevederico/skateboard-ui/shadcn/ui/spinner';
+import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@stevederico/skateboard-ui/shadcn/ui/sheet';
+import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
+import { Progress } from '@stevederico/skateboard-ui/shadcn/ui/progress';
 import { toast } from 'sonner';
 import { useApp } from './AppContext.jsx';
 import AppPicker from './AppPicker.jsx';
@@ -36,6 +41,63 @@ const EMPTY_METADATA = {
   supportUrl: '',
   marketingUrl: ''
 };
+
+/** App Store Connect locales */
+const LOCALES = [
+  { code: 'en-US', name: 'English (US)' },
+  { code: 'en-GB', name: 'English (UK)' },
+  { code: 'en-AU', name: 'English (Australia)' },
+  { code: 'en-CA', name: 'English (Canada)' },
+  { code: 'da-DK', name: 'Danish' },
+  { code: 'de-DE', name: 'German' },
+  { code: 'el-GR', name: 'Greek' },
+  { code: 'es-ES', name: 'Spanish (Spain)' },
+  { code: 'es-MX', name: 'Spanish (Mexico)' },
+  { code: 'fi-FI', name: 'Finnish' },
+  { code: 'fr-FR', name: 'French (France)' },
+  { code: 'fr-CA', name: 'French (Canada)' },
+  { code: 'id-ID', name: 'Indonesian' },
+  { code: 'it-IT', name: 'Italian' },
+  { code: 'ja-JP', name: 'Japanese' },
+  { code: 'ko-KR', name: 'Korean' },
+  { code: 'ms-MY', name: 'Malay' },
+  { code: 'nl-NL', name: 'Dutch' },
+  { code: 'no-NO', name: 'Norwegian' },
+  { code: 'pt-BR', name: 'Portuguese (Brazil)' },
+  { code: 'pt-PT', name: 'Portuguese (Portugal)' },
+  { code: 'ru-RU', name: 'Russian' },
+  { code: 'sv-SE', name: 'Swedish' },
+  { code: 'th-TH', name: 'Thai' },
+  { code: 'tr-TR', name: 'Turkish' },
+  { code: 'cmn-Hans', name: 'Chinese (Simplified)' },
+  { code: 'cmn-Hant', name: 'Chinese (Traditional)' },
+  { code: 'vi-VI', name: 'Vietnamese' }
+];
+
+/**
+ * Keyword character limits by locale
+ *
+ * Most locales have 100 chars, but some vary.
+ *
+ * @type {Object.<string, number>}
+ */
+const KEYWORD_LIMITS = {
+  'ja-JP': 100,
+  'ko-KR': 100,
+  'cmn-Hans': 100,
+  'cmn-Hant': 100,
+  default: 100
+};
+
+/**
+ * Get the keyword character limit for a given locale
+ *
+ * @param {string} locale - Locale code
+ * @returns {number} Maximum keyword characters
+ */
+function getKeywordLimit(locale) {
+  return KEYWORD_LIMITS[locale] || KEYWORD_LIMITS.default;
+}
 
 /**
  * Character count indicator with color feedback
@@ -60,13 +122,48 @@ function CharCount({ current, max }) {
   );
 }
 
+/**
+ * Inline diff display comparing original and current text
+ *
+ * @component
+ * @param {Object} props
+ * @param {string} props.original - Original text
+ * @param {string} props.current - Current (modified) text
+ * @param {string} props.label - Field label
+ * @returns {JSX.Element|null} Diff display or null if unchanged
+ */
+function DiffField({ original, current, label }) {
+  if (original === current) return null;
+
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      {original && (
+        <p className="rounded bg-red-50 px-2 py-1 text-xs text-red-700 line-through dark:bg-red-950/30 dark:text-red-400">
+          {original}
+        </p>
+      )}
+      {current && (
+        <p className="rounded bg-green-50 px-2 py-1 text-xs text-green-700 dark:bg-green-950/30 dark:text-green-400">
+          {current}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function MetadataView() {
   const { selectedApp } = useApp();
 
-  const [metadata, setMetadata] = useState(EMPTY_METADATA);
+  // Locale state
+  const [selectedLocale, setSelectedLocale] = useState('en-US');
+  const [localizedMetadata, setLocalizedMetadata] = useState({});
+  const [originalMetadata, setOriginalMetadata] = useState({});
+  const [localizationIds, setLocalizationIds] = useState({});
   const [isLoadingMeta, setIsLoadingMeta] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // AI generation state
   const [isGenerating, setIsGenerating] = useState(false);
   const [keyFeatures, setKeyFeatures] = useState('');
   const [targetAudience, setTargetAudience] = useState('');
@@ -74,17 +171,44 @@ export default function MetadataView() {
   const [generatingField, setGeneratingField] = useState(null);
   const [improvingField, setImprovingField] = useState(null);
 
+  // Translation state
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationProgress, setTranslationProgress] = useState(0);
+
+  // Keyword suggestions state
+  const [suggestions, setSuggestions] = useState([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+
+  // Diff dialog state
+  const [showDiffDialog, setShowDiffDialog] = useState(false);
+
+  // Version history state
+  const [showHistory, setShowHistory] = useState(false);
+  const [historySnapshots, setHistorySnapshots] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  /** Current locale's metadata (convenience accessor) */
+  const metadata = localizedMetadata[selectedLocale] || EMPTY_METADATA;
+
+  /** Whether any changes exist for the current locale */
+  const hasChanges = JSON.stringify(metadata) !== JSON.stringify(originalMetadata[selectedLocale] || EMPTY_METADATA);
+
   /** Fetch metadata when the selected app changes */
   useEffect(() => {
     if (selectedApp?.id) {
       fetchMetadata(selectedApp.id);
     } else {
-      setMetadata(EMPTY_METADATA);
+      setLocalizedMetadata({});
+      setOriginalMetadata({});
+      setLocalizationIds({});
     }
   }, [selectedApp?.id]);
 
   /**
-   * Fetch metadata for the selected app
+   * Fetch all localized metadata for the selected app
+   *
+   * Walks the appInfo → localizations chain and builds a locale-keyed map
+   * of metadata fields plus localization IDs for PATCH requests.
    *
    * @param {string} appId - App Store Connect app identifier
    */
@@ -94,43 +218,109 @@ export default function MetadataView() {
     try {
       const result = await apiRequest(`/asc/apps/${appId}/metadata`);
       if (result?.data) {
-        const attrs = result.data.attributes || {};
-        setMetadata({
-          name: attrs.name || '',
-          subtitle: attrs.subtitle || '',
-          description: attrs.description || '',
-          keywords: attrs.keywords || '',
-          whatsNew: attrs.whatsNew || '',
-          supportUrl: attrs.supportUrl || '',
-          marketingUrl: attrs.marketingUrl || ''
-        });
+        const metaMap = {};
+        const origMap = {};
+        const idMap = {};
+
+        for (const info of result.data) {
+          const localizations = info.localizations || [];
+          for (const loc of localizations) {
+            const locale = loc.attributes?.locale || 'en-US';
+            const fields = {
+              name: loc.attributes?.name || '',
+              subtitle: loc.attributes?.subtitle || '',
+              description: loc.attributes?.description || '',
+              keywords: loc.attributes?.keywords || '',
+              whatsNew: loc.attributes?.whatsNew || '',
+              supportUrl: loc.attributes?.supportUrl || '',
+              marketingUrl: loc.attributes?.marketingUrl || ''
+            };
+            metaMap[locale] = { ...fields };
+            origMap[locale] = { ...fields };
+            idMap[locale] = loc.id;
+          }
+        }
+
+        // Ensure en-US exists
+        if (!metaMap['en-US']) {
+          metaMap['en-US'] = { ...EMPTY_METADATA };
+          origMap['en-US'] = { ...EMPTY_METADATA };
+        }
+
+        setLocalizedMetadata(metaMap);
+        setOriginalMetadata(origMap);
+        setLocalizationIds(idMap);
       }
     } catch {
-      setMetadata(EMPTY_METADATA);
+      setLocalizedMetadata({ 'en-US': { ...EMPTY_METADATA } });
+      setOriginalMetadata({ 'en-US': { ...EMPTY_METADATA } });
     } finally {
       setIsLoadingMeta(false);
     }
   }
 
   /**
-   * Update a single metadata field
+   * Update a single metadata field for the current locale
    *
    * @param {string} field - Field name in metadata state
    * @param {string} value - New field value
    */
   function handleFieldChange(field, value) {
-    setMetadata((prev) => ({ ...prev, [field]: value }));
+    setLocalizedMetadata((prev) => ({
+      ...prev,
+      [selectedLocale]: { ...(prev[selectedLocale] || EMPTY_METADATA), [field]: value }
+    }));
   }
 
-  /** Save metadata changes to App Store Connect */
+  /**
+   * Initiate save — shows diff dialog if changes exist, otherwise saves directly
+   */
+  function handleInitiateSave() {
+    if (hasChanges) {
+      setShowDiffDialog(true);
+    } else {
+      handleSaveMetadata();
+    }
+  }
+
+  /**
+   * Save metadata changes to App Store Connect for the current locale
+   *
+   * Also auto-saves a snapshot to version history.
+   */
   async function handleSaveMetadata() {
     if (!selectedApp?.id) return;
     setIsSaving(true);
+    setShowDiffDialog(false);
     try {
-      await apiRequest(`/asc/apps/${selectedApp.id}/metadata`, {
-        method: 'PATCH',
-        body: JSON.stringify(metadata)
-      });
+      const localizationId = localizationIds[selectedLocale];
+      if (localizationId) {
+        await apiRequest(`/asc/apps/${selectedApp.id}/metadata`, {
+          method: 'PATCH',
+          body: JSON.stringify({ localizationId, attributes: metadata })
+        });
+      }
+
+      // Save to version history
+      try {
+        await apiRequest('/metadata-history', {
+          method: 'POST',
+          body: JSON.stringify({
+            appId: selectedApp.id,
+            locale: selectedLocale,
+            metadata
+          })
+        });
+      } catch {
+        // History save failure shouldn't block the main save
+      }
+
+      // Update original to match current
+      setOriginalMetadata((prev) => ({
+        ...prev,
+        [selectedLocale]: { ...metadata }
+      }));
+
       toast.success('Metadata saved successfully');
     } catch {
       toast.error('Failed to save metadata');
@@ -162,13 +352,16 @@ export default function MetadataView() {
         })
       });
       if (result?.data) {
-        setMetadata((prev) => ({
+        setLocalizedMetadata((prev) => ({
           ...prev,
-          name: result.data.name || prev.name,
-          subtitle: result.data.subtitle || prev.subtitle,
-          description: result.data.description || prev.description,
-          keywords: result.data.keywords || prev.keywords,
-          whatsNew: result.data.whatsNew || prev.whatsNew
+          [selectedLocale]: {
+            ...(prev[selectedLocale] || EMPTY_METADATA),
+            name: result.data.name || metadata.name,
+            subtitle: result.data.subtitle || metadata.subtitle,
+            description: result.data.description || metadata.description,
+            keywords: result.data.keywords || metadata.keywords,
+            whatsNew: result.data.whatsNew || metadata.whatsNew
+          }
         }));
         toast.success('Metadata generated successfully');
       }
@@ -249,6 +442,173 @@ export default function MetadataView() {
     }
   }
 
+  /**
+   * Translate a specific field to all locales via batch translation
+   *
+   * @param {string} field - Metadata field to translate
+   */
+  async function handleTranslateField(field) {
+    const sourceText = metadata[field];
+    if (!sourceText?.trim()) {
+      toast.error('Enter text first');
+      return;
+    }
+
+    setIsTranslating(true);
+    setTranslationProgress(0);
+
+    const englishLocales = new Set(['en-US', 'en-GB', 'en-AU', 'en-CA']);
+    const nonEnglish = LOCALES.filter((l) => !englishLocales.has(l.code));
+    let completed = 0;
+
+    // Copy to English locales
+    for (const code of englishLocales) {
+      setLocalizedMetadata((prev) => ({
+        ...prev,
+        [code]: { ...(prev[code] || EMPTY_METADATA), [field]: sourceText }
+      }));
+    }
+    setTranslationProgress(Math.round((englishLocales.size / LOCALES.length) * 100));
+
+    // Translate to each non-English locale
+    for (const locale of nonEnglish) {
+      try {
+        const response = await apiRequest('/translate/batch', {
+          method: 'POST',
+          body: JSON.stringify({
+            texts: [sourceText],
+            source: 'en',
+            target: locale.code
+          })
+        });
+
+        if (response?.translations?.[0]) {
+          setLocalizedMetadata((prev) => ({
+            ...prev,
+            [locale.code]: {
+              ...(prev[locale.code] || EMPTY_METADATA),
+              [field]: response.translations[0]
+            }
+          }));
+        }
+      } catch {
+        // Skip failed translations
+      }
+
+      completed++;
+      setTranslationProgress(Math.round(((englishLocales.size + completed) / LOCALES.length) * 100));
+    }
+
+    setIsTranslating(false);
+    setTranslationProgress(100);
+    toast.success(`${field} translated to all locales`);
+  }
+
+  /**
+   * Fetch ASO keyword suggestions from AI
+   */
+  async function handleSuggestKeywords() {
+    const appName = metadata.name || selectedApp?.name || '';
+    if (!appName) {
+      toast.error('Enter an app name first');
+      return;
+    }
+    setIsLoadingSuggestions(true);
+    try {
+      const result = await apiRequest('/ai/suggest-keywords', {
+        method: 'POST',
+        body: JSON.stringify({
+          appName,
+          description: metadata.description,
+          locale: selectedLocale,
+          currentKeywords: metadata.keywords
+        })
+      });
+      if (result?.suggestions) {
+        setSuggestions(result.suggestions);
+      }
+    } catch {
+      toast.error('Failed to get keyword suggestions');
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  }
+
+  /**
+   * Add a suggested keyword to the current keywords field
+   *
+   * @param {string} keyword - Keyword to add
+   */
+  function handleAddSuggestion(keyword) {
+    const current = metadata.keywords;
+    const limit = getKeywordLimit(selectedLocale);
+    const separator = current ? ',' : '';
+    const newKeywords = `${current}${separator}${keyword}`;
+    if (newKeywords.length <= limit) {
+      handleFieldChange('keywords', newKeywords);
+      setSuggestions((prev) => prev.filter((s) => s.keyword !== keyword));
+    } else {
+      toast.error('Adding this keyword would exceed the character limit');
+    }
+  }
+
+  /**
+   * Fetch version history snapshots for the current app
+   */
+  async function handleFetchHistory() {
+    if (!selectedApp?.id) return;
+    setIsLoadingHistory(true);
+    try {
+      const result = await apiRequest(`/metadata-history/${selectedApp.id}`);
+      setHistorySnapshots(result?.data || []);
+    } catch {
+      toast.error('Failed to load version history');
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }
+
+  /**
+   * Restore metadata from a history snapshot
+   *
+   * @param {string} snapshotId - Snapshot identifier to restore
+   */
+  async function handleRestoreSnapshot(snapshotId) {
+    try {
+      const result = await apiRequest(`/metadata-history/snapshot/${snapshotId}`);
+      if (result?.data) {
+        const restored = typeof result.data.metadata === 'string'
+          ? JSON.parse(result.data.metadata)
+          : result.data.metadata;
+        const locale = result.data.locale || selectedLocale;
+
+        setLocalizedMetadata((prev) => ({
+          ...prev,
+          [locale]: { ...(prev[locale] || EMPTY_METADATA), ...restored }
+        }));
+        setSelectedLocale(locale);
+        setShowHistory(false);
+        toast.success('Snapshot restored');
+      }
+    } catch {
+      toast.error('Failed to restore snapshot');
+    }
+  }
+
+  /** Get diff fields for the diff dialog */
+  const diffFields = [
+    { key: 'name', label: 'App Name' },
+    { key: 'subtitle', label: 'Subtitle' },
+    { key: 'description', label: 'Description' },
+    { key: 'keywords', label: 'Keywords' },
+    { key: 'whatsNew', label: "What's New" },
+    { key: 'supportUrl', label: 'Support URL' },
+    { key: 'marketingUrl', label: 'Marketing URL' }
+  ];
+
+  const original = originalMetadata[selectedLocale] || EMPTY_METADATA;
+  const keywordLimit = getKeywordLimit(selectedLocale);
+
   return (
     <>
       <Header title="" className="[&>div>div:last-child]:ml-0">
@@ -261,6 +621,44 @@ export default function MetadataView() {
       ) : (
       <div className="flex flex-1 flex-col">
         <div className="flex flex-col gap-6 p-4 md:p-6">
+
+          {/* Locale Selector + Actions */}
+          <Card>
+            <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-end sm:flex-wrap">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="meta-locale-select">Locale</Label>
+                <Select value={selectedLocale} onValueChange={setSelectedLocale}>
+                  <SelectTrigger id="meta-locale-select" className="w-64" aria-label="Select locale for metadata editing">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCALES.map((locale) => (
+                      <SelectItem key={locale.code} value={locale.code}>
+                        {locale.name}
+                        {localizedMetadata[locale.code] ? '' : ' (empty)'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    handleFetchHistory();
+                    setShowHistory(true);
+                  }}
+                  aria-label="View metadata version history"
+                >
+                  History
+                </Button>
+                {hasChanges && (
+                  <Badge variant="outline" className="text-yellow-600">Unsaved changes</Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* AI Generation Card */}
           <Card className="border-blue-200 bg-blue-50/50 dark:border-blue-800 dark:bg-blue-950/20">
@@ -325,6 +723,17 @@ export default function MetadataView() {
             </CardContent>
           </Card>
 
+          {/* Translation Progress */}
+          {isTranslating && (
+            <Card>
+              <CardContent className="flex flex-col gap-2 p-4" role="status" aria-live="polite">
+                <p className="text-sm font-medium">Translating to all locales...</p>
+                <Progress value={translationProgress} aria-label="Translation progress" />
+                <p className="text-xs text-muted-foreground">{translationProgress}% complete</p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Metadata Form */}
           {isLoadingMeta ? (
             <div className="flex items-center justify-center py-12">
@@ -336,7 +745,19 @@ export default function MetadataView() {
                 {/* App Name */}
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="meta-name">App Name</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="meta-name">App Name</Label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        disabled={isTranslating}
+                        onClick={() => handleTranslateField('name')}
+                        aria-label="Translate app name to all locales"
+                      >
+                        Translate All
+                      </Button>
+                    </div>
                     <CharCount current={metadata.name.length} max={30} />
                   </div>
                   <Input
@@ -352,7 +773,19 @@ export default function MetadataView() {
                 {/* Subtitle */}
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="meta-subtitle">Subtitle</Label>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="meta-subtitle">Subtitle</Label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        disabled={isTranslating}
+                        onClick={() => handleTranslateField('subtitle')}
+                        aria-label="Translate subtitle to all locales"
+                      >
+                        Translate All
+                      </Button>
+                    </div>
                     <CharCount current={metadata.subtitle.length} max={30} />
                   </div>
                   <Input
@@ -392,6 +825,16 @@ export default function MetadataView() {
                       >
                         {improvingField === 'description' ? <Spinner className="h-3 w-3" /> : 'Improve'}
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        disabled={isTranslating}
+                        onClick={() => handleTranslateField('description')}
+                        aria-label="Translate description to all locales"
+                      >
+                        Translate All
+                      </Button>
                     </div>
                     <CharCount current={metadata.description.length} max={4000} />
                   </div>
@@ -421,18 +864,69 @@ export default function MetadataView() {
                       >
                         {generatingField === 'keywords' ? <Spinner className="h-3 w-3" /> : 'AI'}
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        disabled={isLoadingSuggestions}
+                        onClick={handleSuggestKeywords}
+                        aria-label="Get ASO keyword suggestions"
+                      >
+                        {isLoadingSuggestions ? <Spinner className="h-3 w-3" /> : 'Suggest'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        disabled={isTranslating}
+                        onClick={() => handleTranslateField('keywords')}
+                        aria-label="Translate keywords to all locales"
+                      >
+                        Translate All
+                      </Button>
                     </div>
-                    <CharCount current={metadata.keywords.length} max={100} />
+                    <div className="flex items-center gap-2">
+                      <CharCount current={metadata.keywords.length} max={keywordLimit} />
+                      {metadata.keywords.length > keywordLimit && (
+                        <Badge variant="destructive" className="text-[10px]">Over limit</Badge>
+                      )}
+                    </div>
                   </div>
                   <Input
                     id="meta-keywords"
                     value={metadata.keywords}
                     onChange={(e) => handleFieldChange('keywords', e.target.value)}
-                    maxLength={100}
+                    maxLength={keywordLimit}
                     placeholder="keyword1,keyword2,keyword3"
-                    aria-label="Keywords, comma-separated, maximum 100 characters"
+                    aria-label={`Keywords, comma-separated, maximum ${keywordLimit} characters`}
                   />
                   <p className="text-xs text-muted-foreground">Separate keywords with commas</p>
+
+                  {/* Keyword Suggestions */}
+                  {suggestions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {suggestions.map((s) => (
+                        <Badge
+                          key={s.keyword}
+                          variant={s.volume === 'high' ? 'default' : s.volume === 'med' ? 'secondary' : 'outline'}
+                          className="cursor-pointer text-xs hover:opacity-80"
+                          onClick={() => handleAddSuggestion(s.keyword)}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Add keyword "${s.keyword}" (${s.volume} volume)`}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              handleAddSuggestion(s.keyword);
+                            }
+                          }}
+                        >
+                          {s.keyword}
+                          <span className="ml-1 opacity-60">{s.volume}</span>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <Separator />
@@ -461,6 +955,16 @@ export default function MetadataView() {
                         aria-label="Improve what's new text with AI"
                       >
                         {improvingField === 'whatsNew' ? <Spinner className="h-3 w-3" /> : 'Improve'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-xs"
+                        disabled={isTranslating}
+                        onClick={() => handleTranslateField('whatsNew')}
+                        aria-label="Translate what's new to all locales"
+                      >
+                        Translate All
                       </Button>
                     </div>
                     <CharCount current={metadata.whatsNew.length} max={4000} />
@@ -506,9 +1010,9 @@ export default function MetadataView() {
 
                 <Separator />
 
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-3">
                   <Button
-                    onClick={handleSaveMetadata}
+                    onClick={handleInitiateSave}
                     disabled={isSaving || !selectedApp?.id}
                     aria-label="Save metadata changes to App Store Connect"
                   >
@@ -522,6 +1026,82 @@ export default function MetadataView() {
         </div>
       </div>
       )}
+
+      {/* Diff Dialog */}
+      <Dialog open={showDiffDialog} onOpenChange={setShowDiffDialog}>
+        <DialogContent className="max-w-lg" aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Review Changes — {LOCALES.find((l) => l.code === selectedLocale)?.name}</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-96">
+            <div className="flex flex-col gap-3 pr-4">
+              {diffFields.map(({ key, label }) => (
+                <DiffField
+                  key={key}
+                  original={original[key]}
+                  current={metadata[key]}
+                  label={label}
+                />
+              ))}
+              {!diffFields.some(({ key }) => original[key] !== metadata[key]) && (
+                <p className="text-sm text-muted-foreground">No changes detected</p>
+              )}
+            </div>
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDiffDialog(false)} aria-label="Cancel save">
+              Cancel
+            </Button>
+            <Button onClick={handleSaveMetadata} disabled={isSaving} aria-label="Confirm and save changes">
+              {isSaving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Version History Sheet */}
+      <Sheet open={showHistory} onOpenChange={setShowHistory}>
+        <SheetContent aria-describedby={undefined}>
+          <SheetHeader>
+            <SheetTitle>Version History</SheetTitle>
+          </SheetHeader>
+          <div className="mt-4 flex flex-col gap-3">
+            {isLoadingHistory ? (
+              <p className="text-sm text-muted-foreground" role="status">Loading history...</p>
+            ) : historySnapshots.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No saved versions yet</p>
+            ) : (
+              <ScrollArea className="h-[calc(100vh-120px)]">
+                <div className="flex flex-col gap-2 pr-4">
+                  {historySnapshots.map((snapshot) => (
+                    <Card key={snapshot.id} className="p-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col gap-0.5">
+                          <p className="text-xs font-medium">
+                            {LOCALES.find((l) => l.code === snapshot.locale)?.name || snapshot.locale}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {new Date(snapshot.saved_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => handleRestoreSnapshot(snapshot.id)}
+                          aria-label={`Restore version from ${new Date(snapshot.saved_at).toLocaleString()}`}
+                        >
+                          Restore
+                        </Button>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
