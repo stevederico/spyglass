@@ -22,6 +22,7 @@ import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
 import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
 import { toast } from 'sonner';
+import { ChevronDown } from 'lucide-react';
 import { STARTER_TEMPLATES } from './composerHelpers.js';
 
 export default function TemplatePanel({ currentState, onLoadTemplate, appId, selectedFont, onFontChange }) {
@@ -191,10 +192,15 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
     }
   }, [fetchFonts]);
 
+  const [collapsed, setCollapsed] = useState(false);
+
   return (
     <div className="px-3 py-2.5">
-      <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Templates</h3>
-      <div className="flex flex-col gap-2">
+      <button onClick={() => setCollapsed((v) => !v)} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsed} aria-controls="section-templates">
+        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Templates</h3>
+        <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsed ? '-rotate-90' : ''}`} aria-hidden="true" />
+      </button>
+      <div id="section-templates" className={`flex flex-col gap-2 ${collapsed ? 'hidden' : ''}`}>
         <div className="flex items-center gap-1.5">
           <Select key={templateSelectKey} onValueChange={handleSelectTemplate}>
             <SelectTrigger className="h-7 flex-1 text-xs" aria-label="Select a template to load">

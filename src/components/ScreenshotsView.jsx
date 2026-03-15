@@ -11,7 +11,8 @@
  * @returns {JSX.Element} Screenshot composer interface
  */
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { useSessionState } from './useSessionState.js';
+import { useSlots } from './useSlots.js';
+import { useSlotHistory } from './useSlotHistory.js';
 import Header from '@stevederico/skateboard-ui/Header';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
@@ -26,15 +27,15 @@ import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
 import { Spinner } from '@stevederico/skateboard-ui/shadcn/ui/spinner';
 import { toast } from 'sonner';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, ChevronDown } from 'lucide-react';
 import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG, renderForLocale } from './composerHelpers.js';
 import { FRAME_MODELS } from './frameManifest.js';
 import { loadFrame, preloadFrame } from './frameLoader.js';
 import { useApp } from './AppContext.jsx';
 import AppPicker from './AppPicker.jsx';
 import TemplatePanel from './TemplatePanel.jsx';
+import Filmstrip from './Filmstrip.jsx';
 import BatchExportDialog from './BatchExportDialog.jsx';
-import { useHistory } from './useHistory.js';
 
 /** Device key options for the device select dropdown */
 const DEVICE_OPTIONS = Object.entries(DEVICES).map(([key, val]) => ({
@@ -152,54 +153,31 @@ export default function ScreenshotsView() {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const dragCounterRef = useRef(0);
 
-  // Background state
-  const [bgTab, setBgTab] = useSessionState('bgTab', 'fill');
-  const [bgColor, setBgColor] = useSessionState('bgColor', '#1a1a2e');
-  const [isGradient, setIsGradient] = useSessionState('isGradient', false);
-  const [gradientStart, setGradientStart] = useSessionState('gradientStart', '#1a1a2e');
-  const [gradientEnd, setGradientEnd] = useSessionState('gradientEnd', '#16213e');
-  const [gradientDirection, setGradientDirection] = useSessionState('gradientDirection', 'top-bottom');
-  const [bgImage, setBgImage] = useSessionState('bgImage', null, { image: true });
+  // All per-screenshot state managed via slots
+  const {
+    bgTab, setBgTab, bgColor, setBgColor, isGradient, setIsGradient,
+    gradientStart, setGradientStart, gradientEnd, setGradientEnd,
+    gradientDirection, setGradientDirection, bgImage, setBgImage,
+    textLine1, setTextLine1, textLine2, setTextLine2, textPosition, setTextPosition,
+    fontSize, setFontSize, textColor, setTextColor, textShadow, setTextShadow,
+    fontWeight, setFontWeight, autoFitText, setAutoFitText,
+    selectedFont, setSelectedFont,
+    device, setDevice, showBezel, setShowBezel, screenshotImage, setScreenshotImage,
+    frameModel, setFrameModel, frameColor, setFrameColor, frameImage, setFrameImage,
+    frameLayout, setFrameLayout, orientation, setOrientation,
+    translations, setTranslations, previewLocale, setPreviewLocale,
+    layers, setLayers,
+    slots, activeSlotIndex, setActiveSlotIndex,
+    addSlots, addEmptySlot, removeSlot, duplicateSlot,
+    activeSlot,
+  } = useSlots();
+
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGeneratingBg, setIsGeneratingBg] = useState(false);
-
-  // Text state (persisted)
-  const [textLine1, setTextLine1] = useSessionState('textLine1', 'Track Your Fitness');
-  const [textLine2, setTextLine2] = useSessionState('textLine2', 'Reach Your Goals');
-  const [textPosition, setTextPosition] = useSessionState('textPosition', 'top');
-  const [fontSize, setFontSize] = useSessionState('fontSize', 100);
-  const [textColor, setTextColor] = useSessionState('textColor', '#ffffff');
-  const [textShadow, setTextShadow] = useSessionState('textShadow', 8);
-  const [fontWeight, setFontWeight] = useSessionState('fontWeight', 'Bold');
-  const [autoFitText, setAutoFitText] = useSessionState('autoFitText', true);
-
-  // Font state (persisted)
-  const [selectedFont, setSelectedFont] = useSessionState('selectedFont', '');
-
-  // Device state (persisted)
-  const [device, setDevice] = useSessionState('device', 'iphone-69');
-  const [showBezel, setShowBezel] = useSessionState('showBezel', true);
-  const [screenshotImage, setScreenshotImage] = useSessionState('screenshotImage', null, { image: true });
-
-  // Device frame PNG state (persisted)
-  const [frameModel, setFrameModel] = useSessionState('frameModel', 'iphone-17-pro-max');
-  const [frameColor, setFrameColor] = useSessionState('frameColor', 'silver');
-  const [frameImage, setFrameImage] = useSessionState('frameImage', null, { image: true });
-  const [frameLayout, setFrameLayout] = useSessionState('frameLayout', 'full');
-  const [orientation, setOrientation] = useSessionState('orientation', 'portrait');
-
-  // Localization state (persisted)
-  const [translations, setTranslations] = useSessionState('translations', {});
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationProgress, setTranslationProgress] = useState(0);
   const [showTranslations, setShowTranslations] = useState(false);
   const [selectedLocales, setSelectedLocales] = useState(() => new Set(LOCALES.filter((l) => !ENGLISH_LOCALES.has(l.code)).map((l) => l.code)));
-  const [previewLocale, setPreviewLocale] = useSessionState('previewLocale', 'en-US');
-
-  // Layer visibility
-  const [layers, setLayers] = useSessionState('layers', {
-    background: true, device: true, headline: true, subheadline: false
-  });
 
   /**
    * Toggle visibility of a named layer
@@ -212,21 +190,17 @@ export default function ScreenshotsView() {
 
   // QoL state
   const [showPreviewAll, setShowPreviewAll] = useState(false);
+  const [showPreviewLocales, setShowPreviewLocales] = useState(false);
 const [panelOpen, setPanelOpen] = useState(true);
+  const [collapsedSections, setCollapsedSections] = useState({});
+  const toggleSection = (key) => setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
 
   // Batch export state
   const [showBatchExport, setShowBatchExport] = useState(false);
 
-  // Undo/redo history
+  // Per-slot undo/redo history
   const isRestoringRef = useRef(false);
-  const { currentState: historyState, pushState, undo, redo, canUndo, canRedo } = useHistory({
-    bgColor: '#1a1a2e', isGradient: false, gradientStart: '#1a1a2e', gradientEnd: '#16213e',
-    gradientDirection: 'top-bottom', textLine1: 'Track Your Fitness', textLine2: 'Reach Your Goals',
-    textPosition: 'top', fontSize: 100, textColor: '#ffffff', textShadow: 8, fontWeight: 'Bold',
-    autoFitText: true, device: 'iphone-69', showBezel: true, selectedFont: '',
-    frameModel: 'iphone-17-pro-max', frameColor: 'silver', frameLayout: 'full',
-    orientation: 'portrait'
-  });
+  const { currentState: historyState, pushState, undo, redo, canUndo, canRedo } = useSlotHistory(slots, activeSlotIndex);
 
   const currentDevice = DEVICES[device];
   const hasTranslations = Object.keys(translations).length > 0;
@@ -398,18 +372,25 @@ const [panelOpen, setPanelOpen] = useState(true);
   }
 
   /**
-   * Handle file drop on the screenshot upload area
+   * Handle file drop on the screenshot upload area.
+   * Single file updates the active slot; multiple files create new slots.
    *
    * @param {DragEvent} e - Drop event
    */
   async function handleDrop(e) {
     e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (!file || !file.type.startsWith('image/')) return;
+    const files = [...e.dataTransfer.files].filter((f) => f.type.startsWith('image/'));
+    if (files.length === 0) return;
     try {
-      const img = await loadImage(file);
-      setScreenshotImage(img);
-      toast.success('Screenshot loaded');
+      if (files.length === 1) {
+        const img = await loadImage(files[0]);
+        setScreenshotImage(img);
+        toast.success('Screenshot loaded');
+      } else {
+        const images = await Promise.all(files.map(loadImage));
+        addSlots(images);
+        toast.success(`${images.length} screenshots added`);
+      }
     } catch {
       toast.error('Failed to load screenshot');
     }
@@ -537,6 +518,23 @@ const [panelOpen, setPanelOpen] = useState(true);
     if (!canvas) return;
     exportCanvasPNG(canvas, device);
     toast.success('Screenshot exported');
+  }
+
+  /**
+   * Export all slots as individual PNG downloads
+   */
+  async function handleExportAll() {
+    for (const slot of slots) {
+      const offscreen = document.createElement('canvas');
+      drawComposite(offscreen, {
+        ...slot,
+        fontFamily: slot.selectedFont,
+        frameModelInfo: slot.frameModel ? FRAME_MODELS[slot.frameModel] : null,
+      });
+      exportCanvasPNG(offscreen, slot.device);
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    toast.success(`Exported ${slots.length} screenshots`);
   }
 
   /**
@@ -878,18 +876,21 @@ const [panelOpen, setPanelOpen] = useState(true);
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Canvas Preview */}
         <section
-          className={`relative flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 md:p-6 transition-colors ${isDraggingOver ? 'bg-primary/5' : ''}`}
+          className="relative flex flex-1 flex-col min-h-0"
           aria-label="Screenshot preview"
-          onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setIsDraggingOver(true); }}
-          onDragLeave={() => { dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setIsDraggingOver(false); } }}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => { dragCounterRef.current = 0; setIsDraggingOver(false); handleDrop(e); }}
         >
-          {isDraggingOver && (
-            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-primary/5">
-              <p className="text-sm font-medium text-primary/70">Drop screenshot here</p>
-            </div>
-          )}
+        <div
+          className={`relative flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 md:p-6 min-h-0 transition-colors ${isDraggingOver ? 'bg-primary/5' : ''}`}
+            onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setIsDraggingOver(true); }}
+            onDragLeave={() => { dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setIsDraggingOver(false); } }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { dragCounterRef.current = 0; setIsDraggingOver(false); handleDrop(e); }}
+          >
+            {isDraggingOver && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-primary/5">
+                <p className="text-sm font-medium text-primary/70">Drop screenshot here</p>
+              </div>
+            )}
             <div
               ref={canvasContainerRef}
               className="relative w-full transition-all duration-300 ease-in-out"
@@ -946,19 +947,35 @@ const [panelOpen, setPanelOpen] = useState(true);
                 />
               )}
             </div>
+          </div>
+          {slots.length > 1 && (
+            <Filmstrip
+              slots={slots}
+              activeIndex={activeSlotIndex}
+              onSelect={setActiveSlotIndex}
+              onRemove={removeSlot}
+              onDuplicate={duplicateSlot}
+              onAdd={addEmptySlot}
+            />
+          )}
           </section>
 
           {/* Right: Tools Panel */}
           <aside
             id="screenshot-settings-panel"
-            className={`sticky top-0 h-[calc(100vh-var(--header-height)-1px)] flex-col border-l border-border/50 bg-background overflow-y-auto transition-all duration-300 ease-in-out ${panelOpen ? 'flex w-72 min-w-72 opacity-100' : 'hidden w-0 min-w-0 opacity-0 pointer-events-none'}`}
+            className={`sticky top-0 h-[calc(100vh-var(--header-height)-1px)] flex-col border-l border-border/50 bg-background transition-all duration-300 ease-in-out ${panelOpen ? 'flex w-72 min-w-72 opacity-100' : 'hidden w-0 min-w-0 opacity-0 pointer-events-none'}`}
             aria-label="Screenshot settings"
             aria-hidden={!panelOpen}
           >
+          {/* Scrollable settings area */}
+          <div className="flex-1 overflow-y-auto min-h-0">
             {/* ── BACKGROUND ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Background</h3>
-              <div className="flex flex-col gap-2">
+              <button onClick={() => toggleSection('bg')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.bg} aria-controls="section-bg">
+                <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Background</h3>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.bg ? '-rotate-90' : ''}`} aria-hidden="true" />
+              </button>
+              <div id="section-bg" className={`flex flex-col gap-2 ${collapsedSections.bg ? 'hidden' : ''}`}>
                 {/* Segment control */}
                 <div className="flex rounded-md border border-border/50 p-0.5" role="tablist" aria-label="Background type">
                   {[{ id: 'fill', label: 'Fill' }, { id: 'upload', label: 'Image' }, { id: 'generate', label: 'AI' }].map((tab) => (
@@ -1062,8 +1079,11 @@ const [panelOpen, setPanelOpen] = useState(true);
 
             {/* ── TEXT ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Text</h3>
-              <div className="flex flex-col gap-2">
+              <button onClick={() => toggleSection('text')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.text} aria-controls="section-text">
+                <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Text</h3>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.text ? '-rotate-90' : ''}`} aria-hidden="true" />
+              </button>
+              <div id="section-text" className={`flex flex-col gap-2 ${collapsedSections.text ? 'hidden' : ''}`}>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Position</span>
                   <Select value={textPosition} onValueChange={setTextPosition}>
@@ -1125,24 +1145,13 @@ const [panelOpen, setPanelOpen] = useState(true);
               </div>
             </div>
 
-            {/* ── TEMPLATES & FONTS ── */}
-            <div className="border-b border-border/40">
-              <TemplatePanel
-                currentState={{
-                  bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
-                  textColor, textShadow, fontWeight, textPosition, fontSize
-                }}
-                onLoadTemplate={handleLoadTemplate}
-                appId={selectedApp?.id}
-                selectedFont={selectedFont}
-                onFontChange={setSelectedFont}
-              />
-            </div>
-
             {/* ── DEVICE ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Device</h3>
-              <div className="flex flex-col gap-2">
+              <button onClick={() => toggleSection('device')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.device} aria-controls="section-device">
+                <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Device</h3>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.device ? '-rotate-90' : ''}`} aria-hidden="true" />
+              </button>
+              <div id="section-device" className={`flex flex-col gap-2 ${collapsedSections.device ? 'hidden' : ''}`}>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Model</span>
                   <Select value={frameModel} onValueChange={(val) => handleFrameModelChange(val === 'none' ? '' : val)}>
@@ -1227,8 +1236,11 @@ const [panelOpen, setPanelOpen] = useState(true);
 
             {/* ── LOCALIZATION ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Localization</h3>
-              <div className="flex flex-col gap-2">
+              <button onClick={() => toggleSection('localization')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.localization} aria-controls="section-localization">
+                <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Localization</h3>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.localization ? '-rotate-90' : ''}`} aria-hidden="true" />
+              </button>
+              <div id="section-localization" className={`flex flex-col gap-2 ${collapsedSections.localization ? 'hidden' : ''}`}>
                 <div className="flex items-center gap-1.5">
                   <Button size="sm" className="h-7 flex-1 text-xs" onClick={handleTranslateSelected} disabled={isTranslating || selectedLocales.size === 0 || (!textLine1.trim() && !textLine2.trim())} aria-label="Translate selected locales">
                     {isTranslating ? 'Translating...' : `Translate (${selectedLocales.size})`}
@@ -1286,8 +1298,11 @@ const [panelOpen, setPanelOpen] = useState(true);
 
             {/* ── LAYERS ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
-              <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Layers</h3>
-              <div className="flex flex-col gap-0.5">
+              <button onClick={() => toggleSection('layers')} className="flex w-full items-center justify-between mb-2" aria-expanded={!collapsedSections.layers} aria-controls="section-layers">
+                <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Layers</h3>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/50 transition-transform ${collapsedSections.layers ? '-rotate-90' : ''}`} aria-hidden="true" />
+              </button>
+              <div id="section-layers" className={`flex flex-col gap-0.5 ${collapsedSections.layers ? 'hidden' : ''}`}>
                 {[
                   { key: 'headline', label: 'Headline' },
                   { key: 'subheadline', label: 'Subheadline' },
@@ -1312,26 +1327,54 @@ const [panelOpen, setPanelOpen] = useState(true);
               </div>
             </div>
 
+            {/* ── TEMPLATES & FONTS ── */}
+            <div className="border-b border-border/40">
+              <TemplatePanel
+                currentState={{
+                  bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
+                  textColor, textShadow, fontWeight, textPosition, fontSize
+                }}
+                onLoadTemplate={handleLoadTemplate}
+                appId={selectedApp?.id}
+                selectedFont={selectedFont}
+                onFontChange={setSelectedFont}
+              />
+            </div>
+          </div>
+
+          {/* Sticky bottom: Export */}
+          <div className="shrink-0 border-t border-border/50">
             {/* ── EXPORT ── */}
             <div className="px-3 py-2.5">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Export</h3>
               <div className="flex flex-col gap-1.5">
-                <Button size="sm" className="h-7 text-xs" onClick={handleExport} aria-label="Export composed screenshot as PNG">
-                  Export PNG
-                </Button>
+                <div className="flex items-center gap-1.5">
+                  <Button size="sm" className="h-7 flex-1 text-xs" onClick={handleExport} aria-label="Export composed screenshot as PNG">
+                    Export PNG
+                  </Button>
+                  {slots.length > 1 && (
+                    <Button size="sm" className="h-7 flex-1 text-xs" onClick={handleExportAll} aria-label={`Export all ${slots.length} screenshots as PNGs`}>
+                      Export All ({slots.length})
+                    </Button>
+                  )}
+                </div>
                 <div className="flex items-center gap-1.5">
                   <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => setShowPreviewAll(true)} aria-label="Preview screenshot at all device sizes">
                     Preview All
                   </Button>
-                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => setShowBatchExport(true)} disabled={!hasTranslations} aria-label="Open batch export dialog">
-                    Batch Export
+                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => setShowPreviewLocales(true)} disabled={!hasTranslations} aria-label="Preview screenshot in all translated locales">
+                    Preview Locales
                   </Button>
                 </div>
+                <Button variant="outline" size="sm" className="h-7 w-full text-xs" onClick={() => setShowBatchExport(true)} disabled={!hasTranslations} aria-label="Open batch export dialog">
+                  Batch Export
+                </Button>
                 <p className="text-center text-[10px] text-muted-foreground/50">
                   {currentDevice.width} &times; {currentDevice.height}px
                 </p>
               </div>
             </div>
+          </div>
           </aside>
       </div>
       )}
@@ -1391,6 +1434,52 @@ const [panelOpen, setPanelOpen] = useState(true);
         </DialogContent>
       </Dialog>
 
+      {/* Preview All Locales Dialog */}
+      <Dialog open={showPreviewLocales} onOpenChange={setShowPreviewLocales}>
+        <DialogContent className="!max-w-[calc(100vw-2rem)] w-full h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>Preview All Locales</DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="flex-1">
+            <div className="grid grid-cols-4 gap-4 p-1">
+              {LOCALES.map((locale) => {
+                const isEnglish = ENGLISH_LOCALES.has(locale.code);
+                const t = translations[locale.code];
+                if (!isEnglish && !t) return null;
+
+                const line1 = isEnglish ? textLine1 : (t?.line1 || textLine1);
+                const line2 = isEnglish ? textLine2 : (t?.line2 || textLine2);
+
+                return (
+                  <div key={locale.code} className="flex flex-col items-center gap-1">
+                    <canvas
+                      ref={(el) => {
+                        if (!el || !showPreviewLocales) return;
+                        const state = {
+                          device, showBezel, screenshotImage,
+                          textLine1: line1, textLine2: line2,
+                          textPosition, fontSize, textColor, textShadow, fontWeight,
+                          bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
+                          autoFitText, fontFamily: selectedFont,
+                          frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
+                          frameLayout, orientation
+                        };
+                        drawComposite(el, state);
+                      }}
+                      style={{ width: '100%', height: 'auto', borderRadius: '4px' }}
+                      aria-label={`Preview for ${locale.name}`}
+                    />
+                    <p className="text-xs text-muted-foreground text-center">
+                      {locale.name}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
       {/* Batch Export Dialog */}
       <BatchExportDialog
         open={showBatchExport}
@@ -1406,6 +1495,7 @@ const [panelOpen, setPanelOpen] = useState(true);
         translations={translations}
         appName={selectedApp?.name}
         appId={selectedApp?.id}
+        slots={slots.length > 1 ? slots : undefined}
       />
     </>
   );

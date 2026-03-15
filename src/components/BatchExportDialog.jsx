@@ -12,6 +12,7 @@
  * @param {Object} props.translations - Map of locale code to { line1, line2, status }
  * @param {string} props.appName - App name for the export package
  * @param {string} props.appId - App identifier for the export package
+ * @param {Object[]} [props.slots] - Optional array of slot states for multi-screenshot export
  * @returns {JSX.Element} Batch export sheet
  */
 import { useState, useCallback } from 'react';
@@ -67,7 +68,7 @@ function renderToBytes(state) {
   });
 }
 
-export default function BatchExportDialog({ open, onOpenChange, baseState, translations, appName, appId }) {
+export default function BatchExportDialog({ open, onOpenChange, baseState, translations, appName, appId, slots }) {
   const [selectedDevices, setSelectedDevices] = useState(
     new Set(DEVICE_ENTRIES.map((d) => d.key))
   );
@@ -117,10 +118,12 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
     }
   }
 
-  const totalCombinations = selectedDevices.size * selectedLocales.size;
+  const slotCount = slots && slots.length > 1 ? slots.length : 1;
+  const totalCombinations = selectedDevices.size * selectedLocales.size * slotCount;
 
   /**
-   * Generate all screenshot combinations and post as an export package
+   * Generate all screenshot combinations and post as an export package.
+   * When slots are provided, generates device x locale x slot-position matrix.
    */
   const handleGenerate = useCallback(async () => {
     if (selectedDevices.size === 0 || selectedLocales.size === 0) {
@@ -134,37 +137,44 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
 
     const files = {};
     let completed = 0;
-    const total = selectedDevices.size * selectedLocales.size;
+    const total = selectedDevices.size * selectedLocales.size * slotCount;
     const localeArray = [...selectedLocales];
     const deviceArray = [...selectedDevices];
-    let position = 1;
+    const slotSources = slots && slots.length > 1 ? slots : [baseState];
 
     for (const locale of localeArray) {
       const t = translations[locale];
       if (!t) continue;
 
-      for (const deviceKey of deviceArray) {
-        setProgressLabel(`${locale} / ${DEVICES[deviceKey].label}`);
+      for (let si = 0; si < slotSources.length; si++) {
+        const slotState = slotSources[si];
+        const position = si + 1;
+        const frameModelInfo = slotState.frameModel
+          ? (slotState.frameModelInfo || null)
+          : (baseState.frameModelInfo || null);
 
-        // Only apply frame PNG when device tier matches the frame model
-        const useFrame = baseState.frameModelInfo && baseState.frameModelInfo.ascTier === deviceKey;
-        const state = {
-          ...baseState,
-          device: deviceKey,
-          textLine1: t.line1 || baseState.textLine1,
-          textLine2: t.line2 || baseState.textLine2,
-          frameImage: useFrame ? baseState.frameImage : null,
-          frameModelInfo: useFrame ? baseState.frameModelInfo : null
-        };
+        for (const deviceKey of deviceArray) {
+          setProgressLabel(`${locale} / ${DEVICES[deviceKey].label} / #${position}`);
 
-        const bytes = await renderToBytes(state);
-        const filename = ascFilename(locale, position, deviceKey);
-        files[filename] = bytes;
+          const useFrame = frameModelInfo && frameModelInfo.ascTier === deviceKey;
+          const state = {
+            ...slotState,
+            fontFamily: slotState.selectedFont || slotState.fontFamily || '',
+            device: deviceKey,
+            textLine1: t.line1 || slotState.textLine1,
+            textLine2: t.line2 || slotState.textLine2,
+            frameImage: useFrame ? slotState.frameImage : null,
+            frameModelInfo: useFrame ? frameModelInfo : null
+          };
 
-        completed++;
-        setProgress(Math.round((completed / total) * 100));
+          const bytes = await renderToBytes(state);
+          const filename = ascFilename(locale, position, deviceKey);
+          files[filename] = bytes;
+
+          completed++;
+          setProgress(Math.round((completed / total) * 100));
+        }
       }
-      position++;
     }
 
     // Post export package to backend
@@ -209,7 +219,7 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
     setIsGenerating(false);
     setProgress(100);
     setProgressLabel('Complete');
-  }, [selectedDevices, selectedLocales, baseState, translations, appName, appId, onOpenChange]);
+  }, [selectedDevices, selectedLocales, baseState, translations, appName, appId, onOpenChange, slots, slotCount]);
 
   const translatedLocales = Object.entries(translations || {}).filter(
     ([, t]) => t.status !== 'error'

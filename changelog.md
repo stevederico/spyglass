@@ -4,6 +4,18 @@
 - ASO keyword tool
 - CLI tool (browserless usage)
 
+0.9.0
+
+  Add multi-screenshot slots
+  Add Filmstrip component
+  Add useSlots hook
+  Add useSlotHistory hook
+  Add per-slot undo/redo
+  Add slot duplicate/remove
+  Add multi-slot batch export
+  Add IndexedDB image persistence
+  Update useSessionState exports
+
 0.8.2
 
   Update README documentation

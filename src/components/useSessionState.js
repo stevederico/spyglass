@@ -26,7 +26,7 @@ const IDB_VERSION = 1;
  *
  * @returns {Promise<IDBDatabase>} Opened database
  */
-function openImageDB() {
+export function openImageDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(IDB_NAME, IDB_VERSION);
     request.onupgradeneeded = () => {
@@ -46,7 +46,7 @@ function openImageDB() {
  * @param {string} key - Storage key
  * @returns {Promise<string|null>} Stored image src or null
  */
-async function readImageDB(key) {
+export async function readImageDB(key) {
   try {
     const db = await openImageDB();
     return new Promise((resolve) => {
@@ -67,7 +67,7 @@ async function readImageDB(key) {
  * @param {string} key - Storage key
  * @param {string|null} value - Image src to store
  */
-async function writeImageDB(key, value) {
+export async function writeImageDB(key, value) {
   try {
     const db = await openImageDB();
     const tx = db.transaction(IDB_STORE, 'readwrite');
@@ -77,6 +77,21 @@ async function writeImageDB(key, value) {
     } else {
       store.delete(STORAGE_PREFIX + key);
     }
+  } catch {
+    // IndexedDB unavailable — fail silently
+  }
+}
+
+/**
+ * Delete an image entry from IndexedDB
+ *
+ * @param {string} key - Storage key to delete
+ */
+export async function deleteImageDB(key) {
+  try {
+    const db = await openImageDB();
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(STORAGE_PREFIX + key);
   } catch {
     // IndexedDB unavailable — fail silently
   }
