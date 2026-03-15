@@ -343,5 +343,10 @@ export default defineConfig({
       ignored: ['**/node_modules/**', '**/.git/**']
     }
   },
-  logLevel: 'error'
+  logLevel: 'error',
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    exclude: ['node_modules/**', 'backend/**']
+  }
 });

@@ -35,21 +35,21 @@ export const STARTER_TEMPLATES = [
     name: 'Minimal',
     settings: {
       bgColor: '#ffffff', isGradient: false, gradientStart: '#ffffff', gradientEnd: '#f0f0f0', gradientDirection: 'top-bottom',
-      textColor: '#000000', textShadow: false, fontWeight: 'Regular', textPosition: 'top', fontSize: 42
+      textColor: '#000000', textShadow: 0, fontWeight: 'Regular', textPosition: 'top', fontSize: 100
     }
   },
   {
     name: 'Bold',
     settings: {
       bgColor: '#1a1a2e', isGradient: true, gradientStart: '#1a1a2e', gradientEnd: '#16213e', gradientDirection: 'top-bottom',
-      textColor: '#ffffff', textShadow: true, fontWeight: 'Bold', textPosition: 'top', fontSize: 48
+      textColor: '#ffffff', textShadow: 8, fontWeight: 'Bold', textPosition: 'top', fontSize: 100
     }
   },
   {
     name: 'Gradient',
     settings: {
       bgColor: '#ff6b6b', isGradient: true, gradientStart: '#ff6b6b', gradientEnd: '#ffa502', gradientDirection: 'diagonal',
-      textColor: '#ffffff', textShadow: true, fontWeight: 'Bold', textPosition: 'bottom', fontSize: 46
+      textColor: '#ffffff', textShadow: 8, fontWeight: 'Bold', textPosition: 'bottom', fontSize: 100
     }
   }
 ];
@@ -62,7 +62,7 @@ export const STARTER_TEMPLATES = [
  * @param {string} [fontFamily] - Optional custom font family name
  * @returns {string} CSS font shorthand string
  */
-function buildFontString(fontWeight, fontSize, fontFamily) {
+export function buildFontString(fontWeight, fontSize, fontFamily) {
   return fontFamily
     ? `${fontWeight} ${fontSize}px "${fontFamily}", -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif`
     : `${fontWeight} ${fontSize}px -apple-system, "SF Pro Display", "Helvetica Neue", sans-serif`;
@@ -83,7 +83,7 @@ function buildFontString(fontWeight, fontSize, fontFamily) {
  * @param {string} [fontFamily] - Optional custom font family name
  * @returns {{ fontSize: number, lines: string[] }} Fitted font size and wrapped lines
  */
-function fitTextToBox(ctx, text, maxWidth, maxHeight, initialFontSize, fontWeight, fontFamily) {
+export function fitTextToBox(ctx, text, maxWidth, maxHeight, initialFontSize, fontWeight, fontFamily) {
   const MIN_FONT_SIZE = 16;
   let fontSize = initialFontSize;
 
@@ -236,22 +236,22 @@ function drawDeviceFrame(ctx, x, y, w, h, radius, bezelWidth) {
  * @param {number} maxWidth - Maximum text width before wrapping
  * @param {number} fontSize - Font size in pixels
  * @param {string} color - Text fill color
- * @param {boolean} hasShadow - Whether to apply drop shadow
+ * @param {number} shadowBlur - Shadow blur radius (0 = no shadow)
  * @param {string} fontWeight - CSS font weight value ("300", "400", or "700")
  * @param {number} [maxHeight] - Optional max height to auto-fit text into
  * @param {string} [fontFamily] - Optional custom font family name
  */
-function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, hasShadow, fontWeight, maxHeight, fontFamily) {
+function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, shadowBlur, fontWeight, maxHeight, fontFamily) {
   if (!text) return;
 
   ctx.fillStyle = color;
   ctx.textAlign = 'center';
 
-  if (hasShadow) {
+  if (shadowBlur > 0) {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = shadowBlur;
     ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 4;
+    ctx.shadowOffsetY = Math.round(shadowBlur / 2);
   }
 
   if (maxHeight) {
@@ -318,11 +318,14 @@ function drawMarketingText(ctx, text, x, y, maxWidth, fontSize, color, hasShadow
  * @param {Object|null} [state.frameModelInfo] - Frame model info from FRAME_MODELS
  * @param {'full'|'zoomed'} [state.frameLayout='full'] - Device layout: "full" fits entire device, "zoomed" scales wider and clips bottom
  * @param {Object} [state.layers] - Layer visibility flags { background, device, headline, subheadline }
+ * @param {'portrait'|'landscape'} [state.orientation='portrait'] - Canvas orientation
  */
 export function drawComposite(canvas, state) {
   const ctx = canvas.getContext('2d');
   const deviceInfo = DEVICES[state.device];
-  const { width: cw, height: ch } = deviceInfo;
+  const isLandscape = state.orientation === 'landscape';
+  const cw = isLandscape ? deviceInfo.height : deviceInfo.width;
+  const ch = isLandscape ? deviceInfo.width : deviceInfo.height;
 
   canvas.width = cw;
   canvas.height = ch;
@@ -345,8 +348,12 @@ export function drawComposite(canvas, state) {
   const isFullscreen = layout === 'fullscreen';
   const isZoomed = layout === 'zoomed';
   const padding = ch * 0.12;
-  const textAreaHeight = isFullscreen ? 0 : ch * (isZoomed ? 0.12 : 0.15);
+  const textAreaHeight = isFullscreen ? 0 : ch * (isZoomed ? 0.15 : 0.15);
   const isTop = state.textPosition === 'top';
+
+  // Device screen dimensions, swapped for landscape
+  const devW = isLandscape ? deviceInfo.height : deviceInfo.width;
+  const devH = isLandscape ? deviceInfo.width : deviceInfo.height;
 
   let screenScale, frameX, frameY, frameW, frameH;
   if (isFullscreen) {
@@ -358,18 +365,18 @@ export function drawComposite(canvas, state) {
     frameH = ch;
   } else if (isZoomed) {
     // Zoomed: scale device to ~90% canvas width, let bottom overflow off-canvas
-    screenScale = (cw * 0.90) / deviceInfo.width;
-    frameW = deviceInfo.width * screenScale;
-    frameH = deviceInfo.height * screenScale;
+    screenScale = (cw * 0.90) / devW;
+    frameW = devW * screenScale;
+    frameH = devH * screenScale;
     frameX = (cw - frameW) / 2;
     frameY = isTop ? textAreaHeight + padding * 0.3 : padding * 0.3;
   } else {
     // Normal: fit entire device within available space
     frameY = isTop ? textAreaHeight + padding * 0.5 : padding * 0.5;
     const availableHeight = ch - textAreaHeight - padding;
-    screenScale = Math.min((cw * 0.85) / deviceInfo.width, availableHeight / deviceInfo.height);
-    frameW = deviceInfo.width * screenScale;
-    frameH = deviceInfo.height * screenScale;
+    screenScale = Math.min((cw * 0.85) / devW, availableHeight / devH);
+    frameW = devW * screenScale;
+    frameH = devH * screenScale;
     frameX = (cw - frameW) / 2;
   }
   const scaledRadius = deviceInfo.radius * screenScale;
@@ -388,9 +395,13 @@ export function drawComposite(canvas, state) {
 
     if (hasFramePNG) {
       const model = state.frameModelInfo;
-      const screenInsetX = (model.frameWidth - model.screenWidth) / 2;
-      const screenInsetY = (model.frameHeight - model.screenHeight) / 2;
-      const pngScale = frameW / model.screenWidth;
+      const mScreenW = isLandscape ? model.screenHeight : model.screenWidth;
+      const mScreenH = isLandscape ? model.screenWidth : model.screenHeight;
+      const mFrameW = isLandscape ? model.frameHeight : model.frameWidth;
+      const mFrameH = isLandscape ? model.frameWidth : model.frameHeight;
+      const screenInsetX = (mFrameW - mScreenW) / 2;
+      const screenInsetY = (mFrameH - mScreenH) / 2;
+      const pngScale = frameW / mScreenW;
 
       // Draw screenshot clipped to screen area
       ctx.save();
@@ -407,8 +418,8 @@ export function drawComposite(canvas, state) {
       // Overlay frame PNG on top
       const framePngX = frameX - screenInsetX * pngScale;
       const framePngY = frameY - screenInsetY * pngScale;
-      const framePngW = model.frameWidth * pngScale;
-      const framePngH = model.frameHeight * pngScale;
+      const framePngW = mFrameW * pngScale;
+      const framePngH = mFrameH * pngScale;
       ctx.drawImage(state.frameImage, framePngX, framePngY, framePngW, framePngH);
     } else {
       ctx.save();

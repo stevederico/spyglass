@@ -2,6 +2,23 @@
 
 ## To-Do
 - ASO keyword tool
+- CLI tool (browserless usage)
+
+0.8.0
+
+  Add session state persistence
+  Add Google Fonts loader
+  Add orientation support
+  Add selective locale translation
+  Add drag-drop screenshot upload
+  Add composerHelpers test suite
+  Add useSessionState hook
+  Add vitest test infrastructure
+  Fix API URL getBackendURL
+  Fix dark main background scope
+  Update frame model/device linking
+  Update text shadow numeric
+  Remove custom font upload
 
 0.7.1
 

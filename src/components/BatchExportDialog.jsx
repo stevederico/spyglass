@@ -15,6 +15,7 @@
  * @returns {JSX.Element} Batch export sheet
  */
 import { useState, useCallback } from 'react';
+import { getBackendURL } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@stevederico/skateboard-ui/shadcn/ui/sheet';
 import { Checkbox } from '@stevederico/skateboard-ui/shadcn/ui/checkbox';
@@ -188,11 +189,15 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
         formData.append(`file-${locale}-${device}`, blob, fileBase);
       }
 
-      await fetch('/api/exports', {
+      const response = await fetch(`${getBackendURL()}/exports`, {
         method: 'POST',
         body: formData,
         credentials: 'include'
       });
+
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
+      }
 
       toast.success(`Export package created with ${completed} screenshots`);
       onOpenChange(false);

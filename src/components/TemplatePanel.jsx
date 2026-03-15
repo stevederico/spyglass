@@ -211,25 +211,6 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
           </Button>
         </div>
 
-        {/* Font */}
-        <div className="flex items-center gap-1.5">
-          <span className="shrink-0 text-xs text-muted-foreground">Font</span>
-          <Select value={selectedFont || 'system-default'} onValueChange={(val) => onFontChange(val === 'system-default' ? '' : val)}>
-            <SelectTrigger className="h-7 flex-1 text-xs" aria-label="Font family selection">
-              <SelectValue>{selectedFont || 'System Default'}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="system-default">System Default</SelectItem>
-              {fonts.map((font) => (
-                <SelectItem key={font.id} value={font.name}>{font.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" className="h-7 shrink-0 text-xs" onClick={() => fontInputRef.current?.click()} aria-label="Upload custom font file">
-            Upload
-          </Button>
-          <input ref={fontInputRef} type="file" accept=".ttf,.otf" onChange={handleFontUpload} className="hidden" aria-label="Font file input" />
-        </div>
       </div>
 
       {/* Save template dialog */}

@@ -108,9 +108,9 @@ button,
 }
 
 /* ── Main content area dark bg ── */
-main {
+.dark main {
   background: var(--color-background);
-  border-color: hsl(var(--border)) !important;
+  border-color: hsl(0 0% 10%) !important;
 }
 
 /* ── Match sidebar wrapper and sidebar to unified dark bg ── */

@@ -10,7 +10,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import Header from '@stevederico/skateboard-ui/Header';
-import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
+import { apiRequest, getBackendURL } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
 import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
@@ -114,7 +114,7 @@ export default function ExportsView() {
   const handleDownload = useCallback(async (pkg) => {
     setDownloadingId(pkg.id);
     try {
-      const response = await fetch(`/api/exports/${pkg.id}/download`, { credentials: 'include' });
+      const response = await fetch(`${getBackendURL()}/exports/${pkg.id}/download`, { credentials: 'include' });
       if (!response.ok) throw new Error('Download failed');
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -267,7 +267,7 @@ export default function ExportsView() {
                           {expandedFiles.map((file) => (
                             <div key={file.id} className="group relative">
                               <img
-                                src={`/api/exports/${pkg.id}/files/${file.id}`}
+                                src={`${getBackendURL()}/exports/${pkg.id}/files/${file.id}`}
                                 alt={`${file.locale} ${file.device}`}
                                 className="w-full rounded border border-border/30 object-contain"
                                 loading="lazy"

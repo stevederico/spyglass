@@ -11,6 +11,7 @@
  * @returns {JSX.Element} Screenshot composer interface
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useSessionState } from './useSessionState.js';
 import Header from '@stevederico/skateboard-ui/Header';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
@@ -50,6 +51,31 @@ const GRADIENT_DIRECTIONS = [
 
 /** Font weight options */
 const WEIGHT_OPTIONS = Object.keys(FONT_WEIGHTS);
+
+/** Curated Google Fonts for marketing text */
+const GOOGLE_FONTS = [
+  'Roboto', 'Open Sans', 'Montserrat', 'Lato', 'Poppins',
+  'Oswald', 'Raleway', 'Playfair Display', 'Merriweather', 'Nunito',
+  'Inter', 'Work Sans', 'DM Sans', 'Outfit', 'Space Grotesk',
+  'Bebas Neue', 'Archivo Black', 'Righteous', 'Pacifico', 'Caveat'
+];
+
+/** Set of Google Fonts already loaded via CSS link */
+const loadedGoogleFonts = new Set();
+
+/**
+ * Load a Google Font by injecting a stylesheet link element
+ *
+ * @param {string} fontName - Google Font family name
+ */
+function loadGoogleFont(fontName) {
+  if (!fontName || loadedGoogleFonts.has(fontName)) return;
+  loadedGoogleFonts.add(fontName);
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@300;400;700&display=swap`;
+  document.head.appendChild(link);
+}
 
 /** All supported App Store Connect locales */
 const LOCALES = [
@@ -95,18 +121,26 @@ const HISTORY_DEBOUNCE_MS = 500;
  * @param {string} status - One of 'original', 'translated', 'modified', 'error'
  * @returns {{ label: string, variant: string }} Badge display properties
  */
+/**
+ * Return Badge variant and label for a translation status
+ *
+ * @param {string} status - One of 'waiting', 'translating', 'original', 'translated', 'modified', 'error'
+ * @returns {{ label: string, variant: string }} Badge display properties
+ */
 function getStatusBadge(status) {
   switch (status) {
     case 'original':
       return { label: 'Original', variant: 'secondary' };
     case 'translated':
       return { label: 'Translated', variant: 'default' };
+    case 'translating':
+      return { label: 'Translating', variant: 'outline' };
     case 'modified':
       return { label: 'Modified', variant: 'outline' };
     case 'error':
       return { label: 'Error', variant: 'destructive' };
     default:
-      return { label: 'Pending', variant: 'secondary' };
+      return { label: 'Waiting', variant: 'secondary' };
   }
 }
 
@@ -115,51 +149,55 @@ export default function ScreenshotsView() {
   const canvasRef = useRef(null);
   const canvasContainerRef = useRef(null);
   const [editingLine, setEditingLine] = useState(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const dragCounterRef = useRef(0);
 
   // Background state
-  const [bgTab, setBgTab] = useState('fill');
-  const [bgColor, setBgColor] = useState('#1a1a2e');
-  const [isGradient, setIsGradient] = useState(false);
-  const [gradientStart, setGradientStart] = useState('#1a1a2e');
-  const [gradientEnd, setGradientEnd] = useState('#16213e');
-  const [gradientDirection, setGradientDirection] = useState('top-bottom');
-  const [bgImage, setBgImage] = useState(null);
+  const [bgTab, setBgTab] = useSessionState('bgTab', 'fill');
+  const [bgColor, setBgColor] = useSessionState('bgColor', '#1a1a2e');
+  const [isGradient, setIsGradient] = useSessionState('isGradient', false);
+  const [gradientStart, setGradientStart] = useSessionState('gradientStart', '#1a1a2e');
+  const [gradientEnd, setGradientEnd] = useSessionState('gradientEnd', '#16213e');
+  const [gradientDirection, setGradientDirection] = useSessionState('gradientDirection', 'top-bottom');
+  const [bgImage, setBgImage] = useSessionState('bgImage', null, { image: true });
   const [aiPrompt, setAiPrompt] = useState('');
   const [isGeneratingBg, setIsGeneratingBg] = useState(false);
 
-  // Text state
-  const [textLine1, setTextLine1] = useState('Track Your Fitness');
-  const [textLine2, setTextLine2] = useState('Reach Your Goals');
-  const [textPosition, setTextPosition] = useState('top');
-  const [fontSize, setFontSize] = useState(100);
-  const [textColor, setTextColor] = useState('#ffffff');
-  const [textShadow, setTextShadow] = useState(true);
-  const [fontWeight, setFontWeight] = useState('Bold');
-  const [autoFitText, setAutoFitText] = useState(true);
+  // Text state (persisted)
+  const [textLine1, setTextLine1] = useSessionState('textLine1', 'Track Your Fitness');
+  const [textLine2, setTextLine2] = useSessionState('textLine2', 'Reach Your Goals');
+  const [textPosition, setTextPosition] = useSessionState('textPosition', 'top');
+  const [fontSize, setFontSize] = useSessionState('fontSize', 100);
+  const [textColor, setTextColor] = useSessionState('textColor', '#ffffff');
+  const [textShadow, setTextShadow] = useSessionState('textShadow', 8);
+  const [fontWeight, setFontWeight] = useSessionState('fontWeight', 'Bold');
+  const [autoFitText, setAutoFitText] = useSessionState('autoFitText', true);
 
-  // Font state (from templates)
-  const [selectedFont, setSelectedFont] = useState('');
+  // Font state (persisted)
+  const [selectedFont, setSelectedFont] = useSessionState('selectedFont', '');
 
-  // Device state
-  const [device, setDevice] = useState('iphone-65');
-  const [showBezel, setShowBezel] = useState(true);
-  const [screenshotImage, setScreenshotImage] = useState(null);
+  // Device state (persisted)
+  const [device, setDevice] = useSessionState('device', 'iphone-69');
+  const [showBezel, setShowBezel] = useSessionState('showBezel', true);
+  const [screenshotImage, setScreenshotImage] = useSessionState('screenshotImage', null, { image: true });
 
-  // Device frame PNG state
-  const [frameModel, setFrameModel] = useState('iphone-17-pro');
-  const [frameColor, setFrameColor] = useState('silver');
-  const [frameImage, setFrameImage] = useState(null);
-  const [frameLayout, setFrameLayout] = useState('full');
+  // Device frame PNG state (persisted)
+  const [frameModel, setFrameModel] = useSessionState('frameModel', 'iphone-17-pro-max');
+  const [frameColor, setFrameColor] = useSessionState('frameColor', 'silver');
+  const [frameImage, setFrameImage] = useSessionState('frameImage', null, { image: true });
+  const [frameLayout, setFrameLayout] = useSessionState('frameLayout', 'full');
+  const [orientation, setOrientation] = useSessionState('orientation', 'portrait');
 
-  // Localization state
-  const [translations, setTranslations] = useState({});
+  // Localization state (persisted)
+  const [translations, setTranslations] = useSessionState('translations', {});
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationProgress, setTranslationProgress] = useState(0);
   const [showTranslations, setShowTranslations] = useState(false);
-  const [previewLocale, setPreviewLocale] = useState('original');
+  const [selectedLocales, setSelectedLocales] = useState(() => new Set(LOCALES.filter((l) => !ENGLISH_LOCALES.has(l.code)).map((l) => l.code)));
+  const [previewLocale, setPreviewLocale] = useSessionState('previewLocale', 'en-US');
 
   // Layer visibility
-  const [layers, setLayers] = useState({
+  const [layers, setLayers] = useSessionState('layers', {
     background: true, device: true, headline: true, subheadline: true
   });
 
@@ -184,13 +222,21 @@ const [panelOpen, setPanelOpen] = useState(true);
   const { currentState: historyState, pushState, undo, redo, canUndo, canRedo } = useHistory({
     bgColor: '#1a1a2e', isGradient: false, gradientStart: '#1a1a2e', gradientEnd: '#16213e',
     gradientDirection: 'top-bottom', textLine1: 'Track Your Fitness', textLine2: 'Reach Your Goals',
-    textPosition: 'top', fontSize: 100, textColor: '#ffffff', textShadow: true, fontWeight: 'Bold',
-    autoFitText: true, device: 'iphone-65', showBezel: true, selectedFont: '',
-    frameModel: 'iphone-17-pro', frameColor: 'silver', frameLayout: 'full'
+    textPosition: 'top', fontSize: 100, textColor: '#ffffff', textShadow: 8, fontWeight: 'Bold',
+    autoFitText: true, device: 'iphone-69', showBezel: true, selectedFont: '',
+    frameModel: 'iphone-17-pro-max', frameColor: 'silver', frameLayout: 'full',
+    orientation: 'portrait'
   });
 
   const currentDevice = DEVICES[device];
   const hasTranslations = Object.keys(translations).length > 0;
+
+  // Load Google Font when selectedFont changes
+  useEffect(() => {
+    if (selectedFont && GOOGLE_FONTS.includes(selectedFont)) {
+      loadGoogleFont(selectedFont);
+    }
+  }, [selectedFont]);
 
   // Push current settings to history (debounced, skip during restore)
   useEffect(() => {
@@ -199,14 +245,14 @@ const [panelOpen, setPanelOpen] = useState(true);
       pushState({
         bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
         textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
-        autoFitText, device, showBezel, selectedFont, frameModel, frameColor, frameLayout
+        autoFitText, device, showBezel, selectedFont, frameModel, frameColor, frameLayout, orientation
       });
     }, HISTORY_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [
     bgColor, isGradient, gradientStart, gradientEnd, gradientDirection,
     textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
-    autoFitText, device, showBezel, selectedFont, frameModel, frameColor, frameLayout, pushState
+    autoFitText, device, showBezel, selectedFont, frameModel, frameColor, frameLayout, orientation, pushState
   ]);
 
   // Restore state from history on undo/redo
@@ -232,6 +278,7 @@ const [panelOpen, setPanelOpen] = useState(true);
     setFrameModel(historyState.frameModel || '');
     setFrameColor(historyState.frameColor || '');
     setFrameLayout(historyState.frameLayout || 'full');
+    setOrientation(historyState.orientation || 'portrait');
     // Allow next tick before re-enabling history push
     requestAnimationFrame(() => { isRestoringRef.current = false; });
   }, [historyState]);
@@ -494,7 +541,7 @@ const [panelOpen, setPanelOpen] = useState(true);
     if (settings.gradientEnd !== undefined) setGradientEnd(settings.gradientEnd);
     if (settings.gradientDirection !== undefined) setGradientDirection(settings.gradientDirection);
     if (settings.textColor !== undefined) setTextColor(settings.textColor);
-    if (settings.textShadow !== undefined) setTextShadow(settings.textShadow);
+    if (settings.textShadow !== undefined) setTextShadow(typeof settings.textShadow === 'boolean' ? (settings.textShadow ? 8 : 0) : settings.textShadow);
     if (settings.fontWeight !== undefined) setFontWeight(settings.fontWeight);
     if (settings.textPosition !== undefined) setTextPosition(settings.textPosition);
     if (settings.fontSize !== undefined) setFontSize(settings.fontSize);
@@ -507,9 +554,37 @@ const [panelOpen, setPanelOpen] = useState(true);
    * Sets English locales to source text, then calls the batch
    * translation API for all other locales with progress tracking.
    */
-  const handleTranslateAll = useCallback(async () => {
+  /**
+   * Toggle a locale in the selected set
+   *
+   * @param {string} code - Locale code to toggle
+   */
+  function toggleLocale(code) {
+    setSelectedLocales((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
+      return next;
+    });
+  }
+
+  /** Select all non-English locales */
+  function selectAllLocales() {
+    setSelectedLocales(new Set(LOCALES.filter((l) => !ENGLISH_LOCALES.has(l.code)).map((l) => l.code)));
+  }
+
+  /** Deselect all locales */
+  function deselectAllLocales() {
+    setSelectedLocales(new Set());
+  }
+
+  const handleTranslateSelected = useCallback(async () => {
     if (!textLine1.trim() && !textLine2.trim()) {
       toast.error('Enter marketing text first');
+      return;
+    }
+    if (selectedLocales.size === 0) {
+      toast.error('Select at least one language');
       return;
     }
 
@@ -517,23 +592,25 @@ const [panelOpen, setPanelOpen] = useState(true);
     setTranslationProgress(0);
     setShowTranslations(true);
 
-    const newTranslations = {};
+    const newTranslations = { ...translations };
 
+    // Set English locales to original
     for (const code of ENGLISH_LOCALES) {
-      newTranslations[code] = {
-        line1: textLine1,
-        line2: textLine2,
-        status: 'original'
-      };
+      if (selectedLocales.has(code)) {
+        newTranslations[code] = { line1: textLine1, line2: textLine2, status: 'original' };
+      }
     }
 
-    const nonEnglishLocales = LOCALES.filter((l) => !ENGLISH_LOCALES.has(l.code));
+    const toTranslate = LOCALES.filter((l) => selectedLocales.has(l.code) && !ENGLISH_LOCALES.has(l.code));
     let completed = 0;
 
-    setTranslationProgress(Math.round((ENGLISH_LOCALES.size / LOCALES.length) * 100));
+    // Mark selected non-English locales as "translating"
+    for (const locale of toTranslate) {
+      newTranslations[locale.code] = { line1: '', line2: '', status: 'translating' };
+    }
     setTranslations({ ...newTranslations });
 
-    for (const locale of nonEnglishLocales) {
+    for (const locale of toTranslate) {
       try {
         const response = await apiRequest('/translate/batch', {
           method: 'POST',
@@ -558,14 +635,14 @@ const [panelOpen, setPanelOpen] = useState(true);
       }
 
       completed++;
-      setTranslationProgress(Math.round(((ENGLISH_LOCALES.size + completed) / LOCALES.length) * 100));
+      setTranslationProgress(Math.round((completed / toTranslate.length) * 100));
       setTranslations({ ...newTranslations });
     }
 
     setIsTranslating(false);
     setTranslationProgress(100);
-    toast.success('Translation complete');
-  }, [textLine1, textLine2]);
+    toast.success(`Translated ${toTranslate.length} languages`);
+  }, [textLine1, textLine2, selectedLocales, translations]);
 
   /**
    * Handle manual edit of a translated cell
@@ -653,31 +730,62 @@ const [panelOpen, setPanelOpen] = useState(true);
       setFrameImage(null);
       return;
     }
-    loadFrame(frameModel, frameColor, 'portrait')
+    loadFrame(frameModel, frameColor, orientation)
       .then(setFrameImage)
       .catch(() => {
         toast.error('Failed to load device frame');
         setFrameImage(null);
       });
-  }, [frameModel, frameColor]);
+  }, [frameModel, frameColor, orientation]);
 
-  // Auto-set ASC tier and default color when frame model changes
-  useEffect(() => {
-    if (frameModel && FRAME_MODELS[frameModel]) {
-      const model = FRAME_MODELS[frameModel];
+  /**
+   * Handle frame model change from the dropdown — sets device tier, color, and bezel
+   *
+   * @param {string} modelKey - Frame model key from FRAME_MODELS, or '' to clear
+   */
+  function handleFrameModelChange(modelKey) {
+    if (modelKey && FRAME_MODELS[modelKey]) {
+      const model = FRAME_MODELS[modelKey];
+      setFrameModel(modelKey);
       setDevice(model.ascTier);
       setFrameColor(model.defaultColor);
       setShowBezel(true);
+    } else {
+      setFrameModel('');
+      setFrameColor('');
+      setFrameImage(null);
     }
-  }, [frameModel]);
+  }
+
+  /**
+   * Handle device change from the dropdown — auto-selects matching frame model
+   *
+   * @param {string} deviceKey - Device key from DEVICES
+   */
+  function handleDeviceChange(deviceKey) {
+    setDevice(deviceKey);
+    // If current frame model already matches, keep it
+    if (frameModel && FRAME_MODELS[frameModel]?.ascTier === deviceKey) return;
+    // Find first frame model matching this device tier
+    const match = Object.entries(FRAME_MODELS).find(([, m]) => m.ascTier === deviceKey);
+    if (match) {
+      setFrameModel(match[0]);
+      setFrameColor(match[1].defaultColor);
+    } else {
+      setFrameModel('');
+      setFrameColor('');
+      setFrameImage(null);
+    }
+  }
 
   // Redraw canvas whenever any setting changes
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const previewLine1 = previewLocale !== 'original' && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
-    const previewLine2 = previewLocale !== 'original' && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
+    const isEnglishLocale = ENGLISH_LOCALES.has(previewLocale);
+    const previewLine1 = !isEnglishLocale && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
+    const previewLine2 = !isEnglishLocale && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
 
     drawComposite(canvas, {
       device, showBezel, screenshotImage,
@@ -685,14 +793,14 @@ const [panelOpen, setPanelOpen] = useState(true);
       bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
       autoFitText, fontFamily: selectedFont, editingLine, layers,
       frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
-      frameLayout
+      frameLayout, orientation
     });
   }, [
     device, showBezel, screenshotImage,
     textLine1, textLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
     bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
     autoFitText, selectedFont, previewLocale, translations, editingLine, layers,
-    frameImage, frameModel, frameLayout
+    frameImage, frameModel, frameLayout, orientation
   ]);
 
 
@@ -700,6 +808,45 @@ const [panelOpen, setPanelOpen] = useState(true);
     <>
       <Header title="" className="[&>div>div:last-child]:ml-0 [&>div>div:last-child]:flex-1">
         <AppPicker />
+        {selectedApp && (
+          <Select value={previewLocale === 'original' ? 'en-US' : previewLocale} onValueChange={setPreviewLocale}>
+            <SelectTrigger className="h-8 w-44" aria-label="Preview locale for screenshot text">
+              <SelectValue>
+                {LOCALES.find((l) => l.code === (previewLocale === 'original' ? 'en-US' : previewLocale))?.name || 'English (US)'}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {LOCALES.map((locale) => {
+                const t = translations[locale.code];
+                const status = t?.status;
+                return (
+                  <SelectItem key={locale.code} value={locale.code}>
+                    {locale.name}
+                    {status === 'translated' ? ' ✓' : ''}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        )}
+        <Select value={device} onValueChange={handleDeviceChange}>
+          <SelectTrigger className="h-8 w-56 text-xs" aria-label="Select device size">
+            <SelectValue>
+              {currentDevice.label} — {orientation === 'landscape' ? currentDevice.height : currentDevice.width} × {orientation === 'landscape' ? currentDevice.width : currentDevice.height}px
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {DEVICE_OPTIONS.map((d) => {
+              const info = DEVICES[d.key];
+              const requiredLabel = d.key === 'iphone-69' ? ' ★' : d.key === 'ipad-13' ? ' ★ iPad' : '';
+              return (
+                <SelectItem key={d.key} value={d.key}>
+                  {d.label} — {orientation === 'landscape' ? info.height : info.width} × {orientation === 'landscape' ? info.width : info.height}px{requiredLabel}
+                </SelectItem>
+              );
+            })}
+          </SelectContent>
+        </Select>
         <div className="flex-1" />
         <Button
           variant="ghost"
@@ -720,14 +867,21 @@ const [panelOpen, setPanelOpen] = useState(true);
       <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Canvas Preview */}
         <section
-          className="flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 md:p-6"
+          className={`relative flex flex-1 flex-col items-center justify-center gap-3 overflow-y-auto p-4 md:p-6 transition-colors ${isDraggingOver ? 'bg-primary/5' : ''}`}
           aria-label="Screenshot preview"
-          onDrop={handleDrop}
+          onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setIsDraggingOver(true); }}
+          onDragLeave={() => { dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setIsDraggingOver(false); } }}
           onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { dragCounterRef.current = 0; setIsDraggingOver(false); handleDrop(e); }}
         >
+          {isDraggingOver && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-primary/5">
+              <p className="text-sm font-medium text-primary/70">Drop screenshot here</p>
+            </div>
+          )}
             <div
               ref={canvasContainerRef}
-              className={`relative w-full cursor-text transition-all duration-300 ease-in-out ${panelOpen ? 'max-w-lg' : 'max-w-xl'}`}
+              className={`relative w-full transition-all duration-300 ease-in-out ${panelOpen ? 'max-w-lg' : 'max-w-xl'}`}
             >
               <canvas
                 ref={canvasRef}
@@ -738,8 +892,18 @@ const [panelOpen, setPanelOpen] = useState(true);
               {editingLine === 1 && (
                 <input
                   type="text"
-                  value={textLine1}
-                  onChange={(e) => setTextLine1(e.target.value)}
+                  value={!ENGLISH_LOCALES.has(previewLocale) ? (translations[previewLocale]?.line1 ?? textLine1) : textLine1}
+                  onChange={(e) => {
+                    if (!ENGLISH_LOCALES.has(previewLocale)) {
+                      if (!translations[previewLocale]) {
+                        setTranslations((prev) => ({ ...prev, [previewLocale]: { line1: e.target.value, line2: textLine2, status: 'modified' } }));
+                      } else {
+                        handleCellEdit(previewLocale, 'line1', e.target.value);
+                      }
+                    } else {
+                      setTextLine1(e.target.value);
+                    }
+                  }}
                   onBlur={() => setEditingLine(null)}
                   onKeyDown={(e) => { if (e.key === 'Enter') setEditingLine(null); if (e.key === 'Tab') { e.preventDefault(); setEditingLine(2); } }}
                   style={getTextOverlayStyle(1)}
@@ -750,8 +914,18 @@ const [panelOpen, setPanelOpen] = useState(true);
               {editingLine === 2 && (
                 <input
                   type="text"
-                  value={textLine2}
-                  onChange={(e) => setTextLine2(e.target.value)}
+                  value={!ENGLISH_LOCALES.has(previewLocale) ? (translations[previewLocale]?.line2 ?? textLine2) : textLine2}
+                  onChange={(e) => {
+                    if (!ENGLISH_LOCALES.has(previewLocale)) {
+                      if (!translations[previewLocale]) {
+                        setTranslations((prev) => ({ ...prev, [previewLocale]: { line1: textLine1, line2: e.target.value, status: 'modified' } }));
+                      } else {
+                        handleCellEdit(previewLocale, 'line2', e.target.value);
+                      }
+                    } else {
+                      setTextLine2(e.target.value);
+                    }
+                  }}
                   onBlur={() => setEditingLine(null)}
                   onKeyDown={(e) => { if (e.key === 'Enter') setEditingLine(null); if (e.key === 'Tab') { e.preventDefault(); setEditingLine(1); } }}
                   style={getTextOverlayStyle(2)}
@@ -759,36 +933,6 @@ const [panelOpen, setPanelOpen] = useState(true);
                   aria-label="Edit marketing text line 2"
                 />
               )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {currentDevice.width} &times; {currentDevice.height}px &mdash; {currentDevice.label}
-            </p>
-
-            {/* Device Size Picker */}
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              {DEVICE_OPTIONS.map((d) => {
-                const info = DEVICES[d.key];
-                const aspect = info.width / info.height;
-                const isSelected = device === d.key;
-                const h = 44;
-                const w = Math.round(h * aspect);
-                return (
-                  <button
-                    key={d.key}
-                    onClick={() => setDevice(d.key)}
-                    className={`flex flex-col items-center gap-1 rounded-lg p-1.5 transition-colors ${isSelected ? 'bg-primary/10 ring-2 ring-primary' : 'hover:bg-accent/50'}`}
-                    aria-label={`Select ${d.label}`}
-                    aria-pressed={isSelected}
-                  >
-                    <div
-                      className={`flex items-center justify-center ${isSelected ? 'bg-primary/20 text-primary' : 'bg-accent text-muted-foreground'}`}
-                      style={{ width: `${w}px`, height: `${h}px`, borderRadius: info.radius > 0 ? '5px' : '2px' }}
-                    >
-                      <span className="text-[8px] font-medium">{d.label.replace('iPhone ', '').replace('iPad ', '')}</span>
-                    </div>
-                  </button>
-                );
-              })}
             </div>
           </section>
 
@@ -907,7 +1051,6 @@ const [panelOpen, setPanelOpen] = useState(true);
             {/* ── TEXT ── */}
             <div className="border-b border-border/40 px-3 py-2.5">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Text</h3>
-              <p className="mb-2 text-xs text-muted-foreground/50">Click text on canvas to edit</p>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Position</span>
@@ -947,7 +1090,21 @@ const [panelOpen, setPanelOpen] = useState(true);
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Shadow</span>
-                  <Switch id="text-shadow-toggle" checked={textShadow} onCheckedChange={setTextShadow} aria-label="Toggle text shadow" className="scale-75" />
+                  <Input id="text-shadow-input" type="number" min={0} max={50} value={textShadow} onChange={(e) => { const v = parseInt(e.target.value, 10); if (!isNaN(v) && v >= 0 && v <= 50) setTextShadow(v); }} aria-label="Text shadow blur radius" className="h-7 w-16 border-0 bg-transparent text-xs text-right tabular-nums shadow-none" />
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Font</span>
+                  <Select value={selectedFont || 'system-default'} onValueChange={(val) => setSelectedFont(val === 'system-default' ? '' : val)}>
+                    <SelectTrigger className="h-7 w-32 border-0 bg-transparent text-xs shadow-none" aria-label="Font family">
+                      <SelectValue>{selectedFont || 'System Default'}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="system-default">System Default</SelectItem>
+                      {GOOGLE_FONTS.map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Auto-fit</span>
@@ -976,7 +1133,7 @@ const [panelOpen, setPanelOpen] = useState(true);
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">Model</span>
-                  <Select value={frameModel} onValueChange={(val) => setFrameModel(val === 'none' ? '' : val)}>
+                  <Select value={frameModel} onValueChange={(val) => handleFrameModelChange(val === 'none' ? '' : val)}>
                     <SelectTrigger className="h-7 w-40 border-0 bg-transparent text-xs shadow-none" aria-label="Select device frame model">
                       <SelectValue>{frameModel && FRAME_MODELS[frameModel] ? FRAME_MODELS[frameModel].label : 'No frame'}</SelectValue>
                     </SelectTrigger>
@@ -998,14 +1155,15 @@ const [panelOpen, setPanelOpen] = useState(true);
                 {frameModel && FRAME_MODELS[frameModel] && (
                   <div className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">Color</span>
-                    <div className="flex flex-wrap gap-1">
+                    <div className="flex overflow-hidden rounded-md border border-border/50 p-0.5" role="tablist" aria-label="Device frame color">
                       {FRAME_MODELS[frameModel].colors.map((c) => (
                         <button
                           key={c.slug}
+                          role="tab"
+                          aria-selected={frameColor === c.slug}
                           onClick={() => setFrameColor(c.slug)}
-                          className={`rounded px-2 py-0.5 text-[10px] transition-colors ${frameColor === c.slug ? 'bg-primary text-primary-foreground' : 'bg-accent/50 text-muted-foreground hover:bg-accent'}`}
+                          className={`min-w-0 flex-1 truncate rounded px-1.5 py-1 text-xs transition-colors ${frameColor === c.slug ? 'bg-accent text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}
                           aria-label={`Select ${c.label} frame color`}
-                          aria-pressed={frameColor === c.slug}
                         >
                           {c.label}
                         </button>
@@ -1029,31 +1187,28 @@ const [panelOpen, setPanelOpen] = useState(true);
                     ))}
                   </div>
                 </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">Orientation</span>
+                  <div className="flex rounded-md border border-border/50 p-0.5" role="tablist" aria-label="Device orientation">
+                    {[{ id: 'portrait', label: 'Portrait' }, { id: 'landscape', label: 'Landscape' }].map((opt) => (
+                      <button
+                        key={opt.id}
+                        role="tab"
+                        aria-selected={orientation === opt.id}
+                        onClick={() => setOrientation(opt.id)}
+                        className={`flex-1 rounded px-2 py-1 text-xs transition-colors ${orientation === opt.id ? 'bg-accent text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 {!frameModel && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-muted-foreground">Frame</span>
                     <Switch id="bezel-toggle" checked={showBezel} onCheckedChange={setShowBezel} aria-label="Toggle device frame bezel" className="scale-75" />
                   </div>
                 )}
-                <div
-                  className="flex min-h-10 cursor-pointer flex-col items-center justify-center gap-1 rounded border border-dashed border-border/60 bg-accent/10 p-2 transition-colors hover:bg-accent/30"
-                  onClick={() => document.getElementById('screenshot-upload').click()}
-                  role="button"
-                  tabIndex={0}
-                  aria-label="Upload screenshot — click to browse or drop anywhere on canvas"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      document.getElementById('screenshot-upload').click();
-                    }
-                  }}
-                >
-                  {screenshotImage ? (
-                    <p className="text-xs text-foreground">Screenshot loaded — click to replace</p>
-                  ) : (
-                    <p className="text-xs font-medium text-muted-foreground">Browse or drop on canvas</p>
-                  )}
-                </div>
                 <input type="file" id="screenshot-upload" accept="image/*" onChange={handleScreenshotUpload} className="hidden" aria-label="Screenshot file input" />
               </div>
             </div>
@@ -1062,38 +1217,16 @@ const [panelOpen, setPanelOpen] = useState(true);
             <div className="border-b border-border/40 px-3 py-2.5">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Localization</h3>
               <div className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Button size="sm" className="h-7 text-xs" onClick={handleTranslateAll} disabled={isTranslating || (!textLine1.trim() && !textLine2.trim())} aria-label="Translate text into all locales">
-                    {isTranslating ? 'Translating...' : 'Translate All'}
+                <div className="flex items-center gap-1.5">
+                  <Button size="sm" className="h-7 flex-1 text-xs" onClick={handleTranslateSelected} disabled={isTranslating || selectedLocales.size === 0 || (!textLine1.trim() && !textLine2.trim())} aria-label="Translate selected locales">
+                    {isTranslating ? 'Translating...' : `Translate (${selectedLocales.size})`}
                   </Button>
                   {hasTranslations && (
-                    <>
-                      <Button variant="outline" size="sm" className="h-6 text-xs" onClick={() => setShowTranslations(!showTranslations)} aria-label={showTranslations ? 'Hide translations table' : 'Show translations table'}>
-                        {showTranslations ? 'Hide' : 'Show'} ({Object.keys(translations).length})
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-6 text-xs" onClick={handleCopyAll} disabled={isTranslating} aria-label="Copy all translations as JSON">
-                        Copy
-                      </Button>
-                      <Button variant="outline" size="sm" className="h-6 text-xs" onClick={handleExportTranslated} disabled={isTranslating} aria-label="Export all translated screenshots as PNGs">
-                        Export
-                      </Button>
-                    </>
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleCopyAll} disabled={isTranslating} aria-label="Copy all translations as JSON">
+                      Copy
+                    </Button>
                   )}
                 </div>
-
-                {hasTranslations && (
-                  <Select value={previewLocale} onValueChange={setPreviewLocale}>
-                    <SelectTrigger id="preview-locale" className="h-7 text-xs" aria-label="Preview locale on canvas">
-                      <SelectValue>{previewLocale === 'original' ? 'Original' : LOCALES.find((l) => l.code === previewLocale)?.name || 'Original'}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="original">Original</SelectItem>
-                      {LOCALES.map((l) => translations[l.code] ? (
-                        <SelectItem key={l.code} value={l.code}>{l.name}</SelectItem>
-                      ) : null)}
-                    </SelectContent>
-                  </Select>
-                )}
 
                 {isTranslating && (
                   <div className="flex flex-col gap-1" role="status" aria-live="polite">
@@ -1102,41 +1235,40 @@ const [panelOpen, setPanelOpen] = useState(true);
                   </div>
                 )}
 
-                {showTranslations && hasTranslations && (
-                  <ScrollArea className="h-[300px] rounded border border-border/40">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-[100px] text-[10px]">Lang</TableHead>
-                          <TableHead className="text-[10px]">Line 1</TableHead>
-                          <TableHead className="text-[10px]">Line 2</TableHead>
-                          <TableHead className="w-[60px] text-[10px]">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {LOCALES.map((locale) => {
-                          const t = translations[locale.code];
-                          if (!t) return null;
-                          const { label, variant } = getStatusBadge(t.status);
-                          return (
-                            <TableRow key={locale.code}>
-                              <TableCell className="text-[10px] font-medium">{locale.name}</TableCell>
-                              <TableCell>
-                                <Input value={t.line1} onChange={(e) => handleCellEdit(locale.code, 'line1', e.target.value)} disabled={isTranslating} aria-label={`${locale.name} line 1 translation`} className="h-6 text-xs" />
-                              </TableCell>
-                              <TableCell>
-                                <Input value={t.line2} onChange={(e) => handleCellEdit(locale.code, 'line2', e.target.value)} disabled={isTranslating} aria-label={`${locale.name} line 2 translation`} className="h-6 text-xs" />
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={variant} className="text-[9px]">{label}</Badge>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </ScrollArea>
-                )}
+                <div className="flex items-center justify-between">
+                  <button onClick={selectAllLocales} className="text-[10px] text-muted-foreground hover:text-foreground" aria-label="Select all locales">All</button>
+                  <button onClick={deselectAllLocales} className="text-[10px] text-muted-foreground hover:text-foreground" aria-label="Deselect all locales">None</button>
+                </div>
+
+                <ScrollArea className="h-[280px]">
+                  <div className="flex flex-col">
+                    {LOCALES.filter((l) => !ENGLISH_LOCALES.has(l.code)).map((locale) => {
+                      const t = translations[locale.code];
+                      const status = t?.status || 'waiting';
+                      const { label, variant } = getStatusBadge(status);
+                      const isChecked = selectedLocales.has(locale.code);
+                      return (
+                        <button
+                          key={locale.code}
+                          onClick={() => toggleLocale(locale.code)}
+                          className={`flex items-center justify-between rounded px-1.5 py-1 text-left transition-colors hover:bg-accent/30 ${isChecked ? '' : 'opacity-50'}`}
+                          aria-label={`${isChecked ? 'Deselect' : 'Select'} ${locale.name}`}
+                          aria-pressed={isChecked}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[9px] leading-none ${isChecked ? 'border-primary bg-primary text-primary-foreground' : 'border-border/60'}`}>
+                              {isChecked ? '✓' : ''}
+                            </span>
+                            <span className="text-[11px]">{locale.name}</span>
+                          </div>
+                          {status !== 'waiting' && (
+                            <Badge variant={variant} className="text-[8px] px-1 py-0">{label}</Badge>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
               </div>
             </div>
 
@@ -1206,19 +1338,31 @@ const [panelOpen, setPanelOpen] = useState(true);
                   <canvas
                     ref={(el) => {
                       if (!el || !showPreviewAll) return;
-                      const previewLine1 = previewLocale !== 'original' && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
-                      const previewLine2 = previewLocale !== 'original' && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
-                      const frameInfo = frameModel ? FRAME_MODELS[frameModel] : null;
-                      const useFrame = frameInfo && frameInfo.ascTier === d.key;
-                      drawComposite(el, {
+                      const previewLine1 = !ENGLISH_LOCALES.has(previewLocale) && translations[previewLocale]?.line1 ? translations[previewLocale].line1 : textLine1;
+                      const previewLine2 = !ENGLISH_LOCALES.has(previewLocale) && translations[previewLocale]?.line2 ? translations[previewLocale].line2 : textLine2;
+
+                      // Find matching frame model for this device tier
+                      const matchingEntry = Object.entries(FRAME_MODELS).find(([, m]) => m.ascTier === d.key);
+                      const baseState = {
                         device: d.key, showBezel, screenshotImage,
                         textLine1: previewLine1, textLine2: previewLine2, textPosition, fontSize, textColor, textShadow, fontWeight,
                         bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
                         autoFitText, fontFamily: selectedFont,
-                        frameImage: useFrame ? frameImage : null,
-                        frameModelInfo: useFrame ? frameInfo : null,
-                        frameLayout
-                      });
+                        frameLayout, orientation
+                      };
+
+                      if (matchingEntry) {
+                        const [modelKey, modelInfo] = matchingEntry;
+                        loadFrame(modelKey, modelInfo.defaultColor, orientation)
+                          .then((img) => {
+                            drawComposite(el, { ...baseState, frameImage: img, frameModelInfo: modelInfo });
+                          })
+                          .catch(() => {
+                            drawComposite(el, { ...baseState, frameImage: null, frameModelInfo: null });
+                          });
+                      } else {
+                        drawComposite(el, { ...baseState, frameImage: null, frameModelInfo: null });
+                      }
                     }}
                     style={{ width: '100%', height: 'auto', borderRadius: '4px' }}
                     aria-label={`Preview for ${d.label}`}
@@ -1226,7 +1370,7 @@ const [panelOpen, setPanelOpen] = useState(true);
                   <p className="text-xs text-muted-foreground text-center">
                     {d.label}
                     <br />
-                    {dev.width}x{dev.height}
+                    {orientation === 'landscape' ? dev.height : dev.width}x{orientation === 'landscape' ? dev.width : dev.height}
                   </p>
                 </div>
               );
@@ -1245,7 +1389,7 @@ const [panelOpen, setPanelOpen] = useState(true);
           bgColor, isGradient, gradientStart, gradientEnd, gradientDirection, bgImage,
           autoFitText, fontFamily: selectedFont,
           frameImage, frameModelInfo: frameModel ? FRAME_MODELS[frameModel] : null,
-          frameLayout
+          frameLayout, orientation
         }}
         translations={translations}
         appName={selectedApp?.name}
