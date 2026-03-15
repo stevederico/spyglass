@@ -4,6 +4,14 @@
 - ASO keyword tool
 - CLI tool (browserless usage)
 
+0.8.2
+
+  Update README documentation
+  Fix landscape canvas layout
+  Fix preview all dialog sizing
+  Update CLI command dispatch
+  Remove CLI native dependencies
+
 0.8.1
 
   Add default app auto-select

@@ -10,7 +10,7 @@
  * @component
  * @returns {JSX.Element} Screenshot composer interface
  */
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useSessionState } from './useSessionState.js';
 import Header from '@stevederico/skateboard-ui/Header';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
@@ -198,7 +198,7 @@ export default function ScreenshotsView() {
 
   // Layer visibility
   const [layers, setLayers] = useSessionState('layers', {
-    background: true, device: true, headline: true, subheadline: true
+    background: true, device: true, headline: true, subheadline: false
   });
 
   /**
@@ -230,6 +230,17 @@ const [panelOpen, setPanelOpen] = useState(true);
 
   const currentDevice = DEVICES[device];
   const hasTranslations = Object.keys(translations).length > 0;
+
+  /** Max width for the canvas container — keeps landscape the same visual area as portrait, just rotated */
+  const PORTRAIT_BASE_W = { open: 384, closed: 448 };
+  const canvasMaxWidth = useMemo(() => {
+    const { width, height } = currentDevice;
+    const baseW = panelOpen ? PORTRAIT_BASE_W.open : PORTRAIT_BASE_W.closed;
+    if (orientation === 'landscape') {
+      return Math.round(baseW * (height / width));
+    }
+    return baseW;
+  }, [currentDevice, orientation, panelOpen]);
 
   // Load Google Font when selectedFont changes
   useEffect(() => {
@@ -881,7 +892,8 @@ const [panelOpen, setPanelOpen] = useState(true);
           )}
             <div
               ref={canvasContainerRef}
-              className={`relative w-full transition-all duration-300 ease-in-out ${panelOpen ? 'max-w-lg' : 'max-w-xl'}`}
+              className="relative w-full transition-all duration-300 ease-in-out"
+              style={{ maxWidth: canvasMaxWidth }}
             >
               <canvas
                 ref={canvasRef}
@@ -1326,15 +1338,15 @@ const [panelOpen, setPanelOpen] = useState(true);
 
       {/* Preview All Sizes Dialog */}
       <Dialog open={showPreviewAll} onOpenChange={setShowPreviewAll}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="!max-w-[calc(100vw-2rem)] w-full h-[calc(100vh-2rem)] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>Preview All Sizes</DialogTitle>
           </DialogHeader>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          <div className="flex-1 grid grid-cols-4 grid-rows-2 gap-4 min-h-0">
             {DEVICE_OPTIONS.map((d) => {
               const dev = DEVICES[d.key];
               return (
-                <div key={d.key} className="flex flex-col items-center gap-1">
+                <div key={d.key} className="flex flex-col items-center gap-1 min-h-0 overflow-hidden">
                   <canvas
                     ref={(el) => {
                       if (!el || !showPreviewAll) return;
@@ -1364,10 +1376,10 @@ const [panelOpen, setPanelOpen] = useState(true);
                         drawComposite(el, { ...baseState, frameImage: null, frameModelInfo: null });
                       }
                     }}
-                    style={{ width: '100%', height: 'auto', borderRadius: '4px' }}
+                    style={{ width: 'auto', maxWidth: '100%', maxHeight: '100%', borderRadius: '4px' }}
                     aria-label={`Preview for ${d.label}`}
                   />
-                  <p className="text-xs text-muted-foreground text-center">
+                  <p className="shrink-0 text-xs text-muted-foreground text-center">
                     {d.label}
                     <br />
                     {orientation === 'landscape' ? dev.height : dev.width}x{orientation === 'landscape' ? dev.width : dev.height}

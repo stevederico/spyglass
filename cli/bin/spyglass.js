@@ -67,6 +67,9 @@ const options = {
   'app-id': { type: 'string' },
   fields: { type: 'string' },
   tone: { type: 'string' },
+  translations: { type: 'string' },
+  line1: { type: 'string' },
+  line2: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
   version: { type: 'boolean', short: 'v' },
 };
@@ -95,23 +98,22 @@ function showVersion() {
  */
 async function dispatch(command, flags) {
   const commands = {
-    init: () => import('../lib/commands/init.js'),
-    scan: () => import('../lib/commands/scan.js'),
-    capture: () => import('../lib/commands/capture.js'),
-    compose: () => import('../lib/commands/compose.js'),
-    metadata: () => import('../lib/commands/metadata.js'),
-    export: () => import('../lib/commands/export.js'),
-    upload: () => import('../lib/commands/upload.js'),
+    init: async (f) => (await import('../lib/commands/init.js')).init(f),
+    scan: async (f) => (await import('../lib/commands/scan.js')).scan(f),
+    capture: async (f) => (await import('../lib/commands/capture.js')).capture(f),
+    compose: async (f) => (await import('../lib/commands/compose.js')).compose(f),
+    metadata: async (f) => (await import('../lib/commands/metadata.js')).metadata(f),
+    export: async (f) => (await import('../lib/commands/export_.js')).exportPackage(f),
+    upload: async (f) => (await import('../lib/commands/upload.js')).upload(f),
   };
 
-  const loader = commands[command];
-  if (!loader) {
+  const handler = commands[command];
+  if (!handler) {
     console.error(`\x1b[31mUnknown command: ${command}\x1b[0m\n`);
     showHelp();
   }
 
-  const mod = await loader();
-  await mod.default(flags);
+  await handler(flags);
 }
 
 async function main() {

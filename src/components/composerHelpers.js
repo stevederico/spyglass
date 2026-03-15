@@ -27,31 +27,6 @@ export const FONT_WEIGHTS = {
   Bold: '700'
 };
 
-/** Built-in starter template presets */
-export const STARTER_TEMPLATES = [
-  {
-    name: 'Minimal',
-    settings: {
-      bgColor: '#ffffff', isGradient: false, gradientStart: '#ffffff', gradientEnd: '#f0f0f0', gradientDirection: 'top-bottom',
-      textColor: '#000000', textShadow: 0, fontWeight: 'Regular', textPosition: 'top', fontSize: 100
-    }
-  },
-  {
-    name: 'Bold',
-    settings: {
-      bgColor: '#1a1a2e', isGradient: true, gradientStart: '#1a1a2e', gradientEnd: '#16213e', gradientDirection: 'top-bottom',
-      textColor: '#ffffff', textShadow: 8, fontWeight: 'Bold', textPosition: 'top', fontSize: 100
-    }
-  },
-  {
-    name: 'Gradient',
-    settings: {
-      bgColor: '#ff6b6b', isGradient: true, gradientStart: '#ff6b6b', gradientEnd: '#ffa502', gradientDirection: 'diagonal',
-      textColor: '#ffffff', textShadow: 8, fontWeight: 'Bold', textPosition: 'bottom', fontSize: 100
-    }
-  }
-];
-
 /**
  * Build the CSS font string with optional custom font family
  *
@@ -355,7 +330,8 @@ export function drawComposite(canvas, state) {
   // Layout (text on top):
   //   topMargin -> headline baseline -> gap -> subtitle baseline -> bottomGap -> device
   //
-  const scaledFont = state.fontSize * (cw / 1290);
+  const fontRef = Math.min(cw, ch);
+  const scaledFont = state.fontSize * (fontRef / 1290);
   const hasHeadline = vis.headline !== false && state.textLine1;
   const hasSubtitle = state.textLine2;
 
@@ -384,21 +360,38 @@ export function drawComposite(canvas, state) {
 
   let screenScale, frameX, frameY, frameW, frameH;
   if (isFullscreen) {
-    // Fullscreen: screenshot fills entire canvas, no frame
     screenScale = 1;
     frameX = 0;
     frameY = 0;
     frameW = cw;
     frameH = ch;
+  } else if (isLandscape && !isFullscreen) {
+    // Landscape: device centered, text above or below, fit device to ~85% height
+    const devicePadding = ch * 0.05;
+    const availH = ch - textAreaHeight - devicePadding;
+    const availW = cw * 0.85;
+    screenScale = Math.min(availW / devW, availH / devH);
+    frameW = devW * screenScale;
+    frameH = devH * screenScale;
+    frameX = (cw - frameW) / 2;
+    frameY = isTop
+      ? textAreaHeight + (availH - frameH) / 2
+      : devicePadding + (availH - frameH) / 2;
+    if (isZoomed) {
+      screenScale = Math.min((cw * 0.95) / devW, (ch * 0.7) / devH);
+      frameW = devW * screenScale;
+      frameH = devH * screenScale;
+      frameX = (cw - frameW) / 2;
+      frameY = isTop ? textAreaHeight : ch * 0.05;
+    }
   } else if (isZoomed) {
-    // Zoomed: scale device to ~90% canvas width, let bottom overflow off-canvas
     screenScale = (cw * 0.90) / devW;
     frameW = devW * screenScale;
     frameH = devH * screenScale;
     frameX = (cw - frameW) / 2;
     frameY = isTop ? textAreaHeight : scaledFont * 0.5;
   } else {
-    // Normal: fit entire device within available space
+    // Portrait normal: fit entire device within available space
     frameY = isTop ? textAreaHeight : scaledFont * 0.5;
     const availableHeight = ch - textAreaHeight - scaledFont * 0.5;
     screenScale = Math.min((cw * 0.85) / devW, availableHeight / devH);
@@ -510,6 +503,31 @@ export function drawComposite(canvas, state) {
     }
   }
 }
+
+/** Built-in starter template presets */
+export const STARTER_TEMPLATES = [
+  {
+    name: 'Minimal',
+    settings: {
+      bgColor: '#ffffff', isGradient: false, gradientStart: '#ffffff', gradientEnd: '#f0f0f0', gradientDirection: 'top-bottom',
+      textColor: '#000000', textShadow: 0, fontWeight: 'Regular', textPosition: 'top', fontSize: 100
+    }
+  },
+  {
+    name: 'Bold',
+    settings: {
+      bgColor: '#1a1a2e', isGradient: true, gradientStart: '#1a1a2e', gradientEnd: '#16213e', gradientDirection: 'top-bottom',
+      textColor: '#ffffff', textShadow: 8, fontWeight: 'Bold', textPosition: 'top', fontSize: 100
+    }
+  },
+  {
+    name: 'Gradient',
+    settings: {
+      bgColor: '#ff6b6b', isGradient: true, gradientStart: '#ff6b6b', gradientEnd: '#ffa502', gradientDirection: 'diagonal',
+      textColor: '#ffffff', textShadow: 8, fontWeight: 'Bold', textPosition: 'bottom', fontSize: 100
+    }
+  }
+];
 
 /**
  * Render a composite image with locale-specific text
