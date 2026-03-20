@@ -1,8 +1,16 @@
 ## CHANGELOG
 
 ## To-Do
-- ASO keyword tool
 - CLI tool (browserless usage)
+
+0.11.0
+
+  Add Icon Resizer
+  Add Metadata Precheck
+  Add Keyword Research
+  Add Analytics Dashboard
+  Update landing page features
+  Update tagline and pricing
 
 0.9.3
 

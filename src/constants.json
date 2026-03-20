@@ -1,5 +1,5 @@
 {
-    "version": "0.9.2",
+    "version": "0.11.0",
     "design": {
         "baseColor": "neutral",
         "radius": "medium",
@@ -8,7 +8,7 @@
     },
     "appName": "Spyglass",
     "appIcon": "telescope",
-    "tagline": "App Store screenshots, done right.",
+    "tagline": "1 Click App Store Deploy",
     "cta": "Get Started",
     "ctaHeading": "Ready to Get Started?",
     "noLogin": false,
@@ -23,9 +23,24 @@
                 "description": "Layer backgrounds, device frames, and marketing text on a live preview"
             },
             {
+                "icon": "\ud83d\uddbc\ufe0f",
+                "title": "Icon Resizer",
+                "description": "Upload a 1024px PNG and generate all required iOS icon sizes instantly"
+            },
+            {
                 "icon": "\ud83c\udf0d",
                 "title": "28 Locales",
                 "description": "Auto-translate marketing text and metadata to every App Store language"
+            },
+            {
+                "icon": "\ud83d\udee1\ufe0f",
+                "title": "Precheck",
+                "description": "Scan metadata for App Store rejection triggers before submitting"
+            },
+            {
+                "icon": "\ud83d\udcca",
+                "title": "Analytics",
+                "description": "Track impressions, installs, and conversion rates from App Store Connect"
             },
             {
                 "icon": "\ud83d\udce6",
@@ -51,6 +66,26 @@
             "title": "Exports",
             "url": "exports",
             "icon": "download"
+        },
+        {
+            "title": "Icons",
+            "url": "icons",
+            "icon": "image"
+        },
+        {
+            "title": "Precheck",
+            "url": "precheck",
+            "icon": "shield-check"
+        },
+        {
+            "title": "Keywords",
+            "url": "keywords",
+            "icon": "search"
+        },
+        {
+            "title": "Analytics",
+            "url": "analytics",
+            "icon": "bar-chart-3"
         }
     ],
     "stripeProducts": [
@@ -60,8 +95,11 @@
             "interval": "month",
             "lookup_key": "spyglass_unlimited_monthly",
             "features": [
-                "Unlimited Screenshots",
-                "Unlimited Exports",
+                "Unlimited Screenshots & Exports",
+                "Icon Resizer",
+                "Metadata Precheck",
+                "App Store Analytics",
+                "Keyword Research",
                 "All Device Frames & Locales"
             ]
         }

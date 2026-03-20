@@ -12,11 +12,13 @@
     },
     "dependencies": {
         "@hono/node-server": "^1.14.1",
+        "archiver": "^7.0.1",
         "bcryptjs": "^2.4.3",
         "hono": "^4.7.11",
         "jsonwebtoken": "^9.0.2",
         "mongodb": "^6.19.0",
         "pg": "^8.16.3",
+        "sharp": "^0.34.5",
         "stripe": "^18.5.0"
     }
 }

@@ -702,5 +702,53 @@ app.post('/asc/credentials', async (c) => {
   }
 });
 
+// ==== ANALYTICS ====
+
+/**
+ * Fetch analytics metrics for an app from App Store Connect.
+ *
+ * Returns impressions, page views, installs, and conversion rate
+ * for the specified date range (defaults to last 30 days).
+ *
+ * @route GET /asc/analytics/metrics
+ * @param {string} appId - App Store Connect app ID (required)
+ * @param {string} [startDate] - Start date YYYY-MM-DD (default: 30 days ago)
+ * @param {string} [endDate] - End date YYYY-MM-DD (default: today)
+ * @returns {Object} { summary: { impressions, pageViews, installs, conversion }, daily: [], note? }
+ * @throws {400} If appId is missing
+ * @throws {500} On ASC API failure
+ */
+app.get('/asc/analytics/metrics', async (c) => {
+  try {
+    const appId = c.req.query('appId');
+    if (!appId) return c.json({ error: "appId is required" }, 400);
+
+    const endDate = c.req.query('endDate') || new Date().toISOString().split('T')[0];
+    const startDate = c.req.query('startDate') || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const metrics = ['impressionsTotal', 'pageViewCount', 'units', 'conversionRate'];
+    const params = new URLSearchParams({
+      'filter[frequency]': 'DAILY',
+      'filter[measures]': metrics.join(','),
+      'filter[startDate]': startDate,
+      'filter[endDate]': endDate
+    });
+
+    try {
+      const data = await ascFetch(`/v1/apps/${appId}/analyticsReportRequests?${params}`);
+      return c.json(data);
+    } catch {
+      return c.json({
+        summary: { impressions: 0, pageViews: 0, installs: 0, conversion: '0%' },
+        daily: [],
+        note: 'Analytics API requires App Store Connect reporting access'
+      });
+    }
+  } catch (err) {
+    console.error("Analytics metrics error:", err);
+    return c.json({ error: "Failed to fetch metrics" }, 500);
+  }
+});
+
 /** @type {Hono} */
 export default app;
