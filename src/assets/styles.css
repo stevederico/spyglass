@@ -7,9 +7,6 @@
 }
 
 /* ── Sidebar ── */
-[data-slot="sidebar-wrapper"] {
-  --sidebar-width: 12rem !important;
-}
 
 [data-sidebar="footer"] [data-sidebar="menu-button"] > div {
   flex: 0 1 auto !important;
