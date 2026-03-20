@@ -29,7 +29,9 @@ COPY --from=builder /app/dist ./dist
 
 # Copy backend
 COPY --from=builder /app/backend ./backend
-COPY --from=builder /app/backend/node_modules ./backend/node_modules
+
+# Copy root node_modules (npm workspaces hoists backend deps here)
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy package files
 COPY package*.json ./
