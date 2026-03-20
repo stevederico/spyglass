@@ -1431,8 +1431,8 @@ app.use('*', async (c, next) => {
     return next();
   }
 
-  // Try to serve static file
-  const staticMiddleware = serveStatic({ root: config.staticDir });
+  // Try to serve static file (resolve root to absolute path from __dirname)
+  const staticMiddleware = serveStatic({ root: resolve(__dirname, config.staticDir) });
   return staticMiddleware(c, next);
 });
 
