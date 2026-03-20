@@ -1424,21 +1424,16 @@ app.route('/api', keywordsApp);
 // All /api/* routes are handled above. Everything else is static/SPA.
 const staticDir = resolve(__dirname, config.staticDir);
 
-// Serve static assets - skip /api/* paths
-app.use('*', async (c, next) => {
-  // Skip API routes - they're handled by route handlers above
-  if (c.req.path.startsWith('/api/')) {
-    return next();
-  }
+// Serve static assets with correct MIME types
+app.use('/assets/*', serveStatic({ root: staticDir }));
+app.use('/frames/*', serveStatic({ root: staticDir }));
+app.use('/icons/*', serveStatic({ root: staticDir }));
+app.use('/manifest.json', serveStatic({ root: staticDir, path: '/manifest.json' }));
+app.use('/robots.txt', serveStatic({ root: staticDir, path: '/robots.txt' }));
+app.use('/sitemap.xml', serveStatic({ root: staticDir, path: '/sitemap.xml' }));
 
-  // Try to serve static file (resolve root to absolute path from __dirname)
-  const staticMiddleware = serveStatic({ root: resolve(__dirname, config.staticDir) });
-  return staticMiddleware(c, next);
-});
-
-// SPA fallback - serve index.html for client-side routing
+// SPA fallback - serve index.html for all non-API routes
 app.get('*', async (c) => {
-  // Skip API routes
   if (c.req.path.startsWith('/api/')) {
     return c.json({ error: 'Not found' }, 404);
   }
