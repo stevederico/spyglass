@@ -1,11 +1,10 @@
 # Deployment Guide
 
-Deploy your Skateboard app to production.
+Deploy your Spyglass app to production.
 
 ## Prerequisites
 
-- GitHub repository with your Skateboard app
-- Stripe account (for payments)
+- GitHub repository with your app
 - Hosting account (Vercel, Render, or Netlify)
 
 ## Environment Variables
@@ -15,29 +14,11 @@ All platforms require these environment variables:
 ```bash
 # Required
 JWT_SECRET=your_super_secure_jwt_secret_here
-STRIPE_KEY=sk_test_your_stripe_secret_key
-STRIPE_ENDPOINT_SECRET=whsec_your_webhook_secret
 CORS_ORIGINS=https://yourapp.com
-FRONTEND_URL=https://yourapp.com
 
 # Optional
-POSTGRES_URL=postgresql://...  # If using PostgreSQL
-MONGODB_URL=mongodb://...      # If using MongoDB
 FREE_USAGE_LIMIT=20            # Monthly limit for free users
 ```
-
-## Stripe Webhook Setup
-
-For all platforms, configure your Stripe webhook:
-
-1. Go to [dashboard.stripe.com](https://dashboard.stripe.com) → Developers → Webhooks
-2. Click "Add endpoint"
-3. URL: `https://your-backend-url/api/payment`
-4. Select events:
-   - `customer.subscription.created`
-   - `customer.subscription.deleted`
-   - `customer.subscription.updated`
-5. Copy the signing secret to `STRIPE_ENDPOINT_SECRET`
 
 ---
 
@@ -107,7 +88,7 @@ Separate services for frontend (Static Site) and backend (Web Service).
 1. Go to [render.com](https://render.com) → New → Web Service
 2. Connect your GitHub repository
 3. Configure:
-   - Name: `skateboard-backend`
+   - Name: `spyglass-backend`
    - Root Directory: `backend`
    - Runtime: Node
    - Build Command: `npm install`
@@ -120,7 +101,7 @@ Separate services for frontend (Static Site) and backend (Web Service).
 1. Go to Render → New → Static Site
 2. Connect the same repository
 3. Configure:
-   - Name: `skateboard-frontend`
+   - Name: `spyglass-frontend`
    - Build Command: `npm run build`
    - Publish Directory: `dist`
 4. Deploy
@@ -129,13 +110,13 @@ Separate services for frontend (Static Site) and backend (Web Service).
 
 Update `src/constants.json`:
 ```json
-{ "backendURL": "https://skateboard-backend.onrender.com" }
+{ "backendURL": "https://spyglass-backend.onrender.com" }
 ```
 
 Update `backend/config.json`:
 ```json
 {
-  "client": "https://skateboard-frontend.onrender.com",
+  "client": "https://spyglass-frontend.onrender.com",
   "database": { ... }
 }
 ```
@@ -187,8 +168,8 @@ Update `backend/config.json`:
 Use the included Dockerfile for container deployments.
 
 ```bash
-docker build -t skateboard .
-docker run -p 8000:8000 --env-file .env skateboard
+docker build -t spyglass .
+docker run -p 8000:8000 --env-file .env spyglass
 ```
 
 See [ARCHITECTURE.md](ARCHITECTURE.md#production-configuration) for environment configuration.
@@ -200,10 +181,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md#production-configuration) for environment 
 - [ ] Environment variables set on hosting platform
 - [ ] `constants.json` backendURL updated
 - [ ] `config.json` client URL updated
-- [ ] Stripe webhook configured with production URL
-- [ ] Live Stripe keys configured (`sk_live_...`)
 - [ ] Test sign up / sign in flow
-- [ ] Test payment flow
 - [ ] Monitor logs for errors
 
 ## Troubleshooting
@@ -212,10 +190,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md#production-configuration) for environment 
 - Check CORS_ORIGINS includes your frontend URL
 - Verify backendURL in constants.json
 
-**Stripe webhooks failing?**
-- Verify webhook URL ends with `/api/payment`
-- Check STRIPE_ENDPOINT_SECRET matches
-
 **Auth not persisting?**
-- Check FRONTEND_URL is set correctly
 - Verify cookies are being sent (credentials: include)

@@ -40,7 +40,7 @@ Skateboard uses an **Application Shell Architecture** (also known as **Inversion
 │  │   ├── ProtectedRoute                             │
 │  │   ├── Layout                                     │
 │  │   ├── Landing/Sign In/Sign Up/Sign Out          │
-│  │   └── Settings/Payment/Legal pages              │
+│  │   └── Settings/Legal pages                      │
 │  │                                                   │
 │  ├── Utilities                                       │
 │  │   ├── API request handlers                       │
@@ -124,7 +124,6 @@ Skateboard uses an **Application Shell Architecture** (also known as **Inversion
     "title": "Features",
     "items": [...]
   },
-  "stripeProducts": [...],
   "companyName": "Company Inc",
   "companyEmail": "support@company.com"
 }
@@ -224,7 +223,6 @@ export function createSkateboardApp({ constants, appRoutes, defaultRoute }) {
 
               {/* Standard routes */}
               <Route path="settings" element={<SettingsView />} />
-              <Route path="payment" element={<PaymentView />} />
             </Route>
           </Route>
 
@@ -415,7 +413,6 @@ createSkateboardApp({
 - `/app` - Protected route wrapper
 - `/app/:path` - Your custom routes
 - `/app/settings` - Settings page
-- `/app/payment` - Payment page
 - `/terms`, `/privacy`, `/eula`, `/subs` - Legal pages
 
 ### Vite Configuration
@@ -951,24 +948,14 @@ For production deployments, override the default config using environment variab
 ### Environment Variables
 
 ```bash
-# Database (overrides config.json database settings)
-DATABASE_URL=postgresql://user:pass@host:5432/prod_db
-# or
-MONGODB_URL=mongodb+srv://user:pass@cluster.mongodb.net/prod_db
-
 # CORS - Comma-separated list of allowed origins
 CORS_ORIGINS=https://yourapp.com,https://www.yourapp.com
-
-# Frontend URL - Used for Stripe redirects (success/cancel URLs)
-FRONTEND_URL=https://yourapp.com
 
 # Application
 NODE_ENV=production
 PORT=8000
 
 # Required for all environments
-STRIPE_KEY=sk_live_your_stripe_key
-STRIPE_ENDPOINT_SECRET=whsec_your_webhook_secret
 JWT_SECRET=your_secure_jwt_secret
 
 # Usage limits (optional)
@@ -979,9 +966,8 @@ FREE_USAGE_LIMIT=20
 
 | Setting | Development | Production |
 |---------|-------------|------------|
-| Database | SQLite (local config) | PostgreSQL/MongoDB (env vars) |
+| Database | SQLite (local file) | SQLite (local file) |
 | CORS | localhost | CORS_ORIGINS env var |
-| Redirects | localhost:5173 | FRONTEND_URL env var |
 
 ### Docker Deployment
 

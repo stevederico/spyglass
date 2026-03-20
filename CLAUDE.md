@@ -84,7 +84,7 @@ skateboard/
 │   └── constants.json   # All your app config
 ├── backend/
 │   ├── server.js        # Hono server
-│   ├── adapters/        # Database adapters (SQLite, PostgreSQL, MongoDB)
+│   ├── adapters/        # Database adapters (SQLite)
 │   ├── databases/       # SQLite database files
 │   └── config.json      # Backend config with database settings
 ├── package.json         # Dependencies (includes skateboard-ui)
@@ -98,13 +98,11 @@ skateboard/
 
 **Result:** ~550 lines of boilerplate → ~26 lines
 
-### Multi-Database Architecture
-The application uses a database factory pattern supporting three database types:
+### Database
+The application uses SQLite via Node.js built-in DatabaseSync.
 
 **Database Adapters** (`backend/adapters/`):
-- `sqlite.js` - Default SQLite provider using Node.js built-in DatabaseSync
-- `postgres.js` - PostgreSQL provider with connection pooling
-- `mongodb.js` - MongoDB provider with native driver
+- `sqlite.js` - SQLite provider using Node.js built-in DatabaseSync
 - `manager.js` - Unified interface and provider selection
 
 **Configuration** (`backend/config.json`):
@@ -124,7 +122,7 @@ The application uses a database factory pattern supporting three database types:
 - CSRF token protection for state-changing operations
 - Bcrypt password hashing with 10 salt rounds
 - JWT with 30-day expiration
-- Rate limiting (10 req/15min for auth, 5 req/15min for payments, 300 req/15min global)
+- Rate limiting (10 req/15min for auth, 300 req/15min global)
 - Security headers (CSP, HSTS, X-Frame-Options, etc.)
 
 ### Build System Integration
@@ -226,12 +224,8 @@ function MyComponent() {
 ### Environment Setup
 Backend requires `.env` file with:
 - `JWT_SECRET` - Token signing key (required)
-- `STRIPE_KEY` - Payment processing (required)
-- `STRIPE_ENDPOINT_SECRET` - Webhook verification (required)
 - `CORS_ORIGINS` - Comma-separated allowed origins (production)
-- `FRONTEND_URL` - Frontend URL for Stripe redirects (production)
 - `FREE_USAGE_LIMIT` - Usage limit for free users (default: 20)
-- `MONGODB_URL`, `POSTGRES_URL`, `DATABASE_URL` - Database connections (production)
 
 ## Documentation
 

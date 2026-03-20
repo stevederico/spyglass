@@ -1,7 +1,7 @@
 {
   "name": "spyglass",
   "private": false,
-  "version": "0.9.3",
+  "version": "0.10.0",
   "skateboardVersion": "2.26.0",
   "type": "module",
   "workspaces": [
