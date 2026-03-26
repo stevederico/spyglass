@@ -621,6 +621,7 @@ export default function MetadataView() {
                 setShowHistory(true);
               }}
               aria-label="View metadata version history"
+              data-umami-event="metadata-history-opened"
             >
               History
             </Button>
@@ -1000,6 +1001,7 @@ export default function MetadataView() {
                 onClick={handleGenerateAll}
                 disabled={isGenerating}
                 aria-label="Generate all metadata fields with AI"
+                data-umami-event="metadata-generated"
               >
                 {isGenerating ? (
                   <span className="flex items-center gap-2">
@@ -1106,7 +1108,7 @@ export default function MetadataView() {
             <Button variant="outline" onClick={() => setShowDiffDialog(false)} aria-label="Cancel save">
               Cancel
             </Button>
-            <Button onClick={handleSaveMetadata} disabled={isSaving} aria-label="Confirm and save changes">
+            <Button onClick={handleSaveMetadata} disabled={isSaving} aria-label="Confirm and save changes" data-umami-event="metadata-saved">
               {isSaving ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>

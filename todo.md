@@ -5,6 +5,10 @@ One-click deploy to the App Store. After you build an app, Spyglass makes it eas
 
 frames - https://developer.apple.com/design/resources/
 
+- 1 click deply ot eh app store
+- icon resizer
+- app-keywords
+
 ## Screenshot Composer
 Build canvas-based screenshot composer (background + device frame + marketing text overlay)
 Support background options: solid color, gradient, image upload

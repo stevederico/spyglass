@@ -326,6 +326,7 @@ export default function LandingView() {
             href="/signin"
             className="rounded-md px-3 py-1.5 text-sm text-white/60 transition-colors hover:text-white"
             aria-label="Sign in to Spyglass"
+            data-umami-event="nav-signin"
           >
             Sign In
           </a>
@@ -333,6 +334,7 @@ export default function LandingView() {
             href="/signup"
             className="rounded-md bg-indigo-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-indigo-600"
             aria-label="Get started with Spyglass"
+            data-umami-event="nav-signup"
           >
             Get Started
           </a>
@@ -340,7 +342,7 @@ export default function LandingView() {
       </nav>
 
       {/* Hero */}
-      <section className="landing-hero-gradient relative overflow-hidden pb-20 pt-12 md:pt-20" aria-label="Hero">
+      <section className="landing-hero-gradient relative overflow-hidden pb-20 pt-12 md:pt-20" aria-label="Hero" data-section-id="hero">
         <GridPattern />
         <div className="relative z-10 mx-auto flex max-w-6xl flex-col items-center gap-12 px-6 md:flex-row md:gap-16 md:px-12">
           {/* Left: Copy */}
@@ -364,6 +366,7 @@ export default function LandingView() {
                 href="/signup"
                 className="rounded-lg bg-indigo-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-all hover:bg-indigo-600 hover:shadow-indigo-500/30"
                 aria-label="Start using Spyglass for free"
+                data-umami-event="hero-signup"
               >
                 Start Free
               </a>
@@ -410,7 +413,7 @@ export default function LandingView() {
       </div>
 
       {/* Features */}
-      <section id="features" className="relative py-20 md:py-28" aria-label="Features">
+      <section id="features" className="relative py-20 md:py-28" aria-label="Features" data-section-id="features">
         <div className="mx-auto max-w-6xl px-6 md:px-12">
           <div className="mb-14 text-center">
             <Badge variant="outline" className="mb-4 border-white/10 bg-white/5 text-[11px] uppercase tracking-widest text-white/50">
@@ -438,7 +441,7 @@ export default function LandingView() {
       </section>
 
       {/* Workflow */}
-      <section className="border-y border-white/5 bg-white/[0.01] py-20 md:py-28" aria-label="Workflow">
+      <section className="border-y border-white/5 bg-white/[0.01] py-20 md:py-28" aria-label="Workflow" data-section-id="workflow">
         <div className="mx-auto max-w-4xl px-6 md:px-12">
           <div className="mb-14 text-center">
             <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
@@ -462,7 +465,7 @@ export default function LandingView() {
       </section>
 
       {/* CTA */}
-      <section className="py-20 md:py-28" aria-label="Call to action">
+      <section className="py-20 md:py-28" aria-label="Call to action" data-section-id="cta">
         <div className="mx-auto max-w-2xl px-6 text-center md:px-12">
           <div className="landing-cta-gradient rounded-2xl px-8 py-14">
             <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
@@ -476,6 +479,7 @@ export default function LandingView() {
                 href="/signup"
                 className="rounded-lg bg-indigo-500 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-500/20 transition-all hover:bg-indigo-600"
                 aria-label="Get started with Spyglass"
+                data-umami-event="cta-signup"
               >
                 Get Started
               </a>

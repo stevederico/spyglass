@@ -44,4 +44,5 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
   CMD node -e "fetch('http://localhost:8000/api/health').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"
 
 # Run server
-CMD ["node", "--experimental-sqlite", "backend/server.js"]
+WORKDIR /app/backend
+CMD ["node", "--experimental-sqlite", "server.js"]

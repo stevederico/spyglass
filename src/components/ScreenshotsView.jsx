@@ -1167,7 +1167,7 @@ export default function ScreenshotsView() {
                 {bgTab === 'generate' && (
                   <div className="flex flex-col gap-1.5">
                     <Input id="ai-bg-prompt" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Describe a background..." disabled={isGeneratingBg} onKeyDown={(e) => { if (e.key === 'Enter') handleGenerateBg(); }} aria-label="AI background description" className="h-7 text-xs" />
-                    <Button size="sm" className="h-7 text-xs" onClick={handleGenerateBg} disabled={isGeneratingBg || !aiPrompt.trim()} aria-label="Generate AI background">
+                    <Button size="sm" className="h-7 text-xs" onClick={handleGenerateBg} disabled={isGeneratingBg || !aiPrompt.trim()} aria-label="Generate AI background" data-umami-event="bg-generated">
                       {isGeneratingBg ? <Spinner className="h-3 w-3" /> : 'Generate Background'}
                     </Button>
                   </div>
@@ -1340,7 +1340,7 @@ export default function ScreenshotsView() {
               </button>
               <div id="section-localization" className={`flex flex-col gap-2 ${collapsedSections.localization ? 'hidden' : ''}`}>
                 <div className="flex items-center gap-1.5">
-                  <Button size="sm" className="h-7 flex-1 text-xs" onClick={handleTranslateSelected} disabled={isTranslating || selectedLocales.size === 0 || (!textLine1.trim() && !textLine2.trim())} aria-label="Translate selected locales">
+                  <Button size="sm" className="h-7 flex-1 text-xs" onClick={handleTranslateSelected} disabled={isTranslating || selectedLocales.size === 0 || (!textLine1.trim() && !textLine2.trim())} aria-label="Translate selected locales" data-umami-event="locales-translated">
                     {isTranslating ? 'Translating...' : `Translate (${selectedLocales.size})`}
                   </Button>
                   {hasTranslations && (
@@ -1475,11 +1475,11 @@ export default function ScreenshotsView() {
             <div className="px-3 py-2.5">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">Export</h3>
               <div className="flex flex-col gap-1.5">
-                <Button size="sm" className="h-7 text-xs" onClick={() => setShowBatchExport(true)} aria-label="Export screenshots for all devices and locales">
+                <Button size="sm" className="h-7 text-xs" onClick={() => setShowBatchExport(true)} aria-label="Export screenshots for all devices and locales" data-umami-event="batch-export-opened">
                   Export
                 </Button>
                 <div className="flex items-center gap-1.5">
-                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={handleExport} aria-label="Download current screenshot as PNG">
+                  <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={handleExport} aria-label="Download current screenshot as PNG" data-umami-event="screenshot-downloaded">
                     Download PNG
                   </Button>
                   <Button variant="outline" size="sm" className="h-7 flex-1 text-xs" onClick={() => setShowPreviewLocales(true)} disabled={!hasTranslations} aria-label="Preview screenshot in all translated locales">

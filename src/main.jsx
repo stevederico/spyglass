@@ -20,6 +20,16 @@ import AnalyticsView from './components/AnalyticsView.jsx';
 import SettingsView from './components/SettingsView.jsx';
 import LandingView from './components/LandingView.jsx';
 import { AppProvider } from './components/AppContext.jsx';
+import AnalyticsProvider from './components/AnalyticsProvider.jsx';
+
+/**
+ * Composed wrapper: analytics tracking wraps app-specific context.
+ * @param {Object} props
+ * @param {React.ReactNode} props.children
+ */
+const AppWrapper = ({ children }) => (
+  <AnalyticsProvider><AppProvider>{children}</AppProvider></AnalyticsProvider>
+);
 
 /**
  * Application route configuration
@@ -54,7 +64,7 @@ createSkateboardApp({
   appRoutes,
   defaultRoute: 'home',
   landingPage: <LandingView />,
-  wrapper: AppProvider,
+  wrapper: AppWrapper,
   overrides: {
     settings: SettingsView
   }
