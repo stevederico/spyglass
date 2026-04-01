@@ -4,7 +4,14 @@
 One-click deploy to the App Store. After you build an app, Spyglass makes it easy and simple to generate every asset you need — screenshots, metadata, translations — and submit to every language and market.
 
 frames - https://developer.apple.com/design/resources/
-
+- 1-click App Store deploy
+  - SDScreenshotMaker
+  - SDAppResizer
+  - App-Keyword-Tool
+  - AppDescMaker
+  - AppAnnie
+  - Submitter
+  - itunes-connect-report
 - 1 click deply ot eh app store
 - icon resizer
 - app-keywords
