@@ -3,6 +3,10 @@
 ## To-Do
 - CLI tool (browserless usage)
 
+0.11.1
+
+  Document CLI setup
+
 0.11.0
 
   Add Icon Resizer
