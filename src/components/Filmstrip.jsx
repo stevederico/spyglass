@@ -18,7 +18,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { drawComposite, DEVICES } from './composerHelpers.js';
 import { FRAME_MODELS } from './frameManifest.js';
-import { X, Plus, Copy } from 'lucide-react';
+import { X, Plus, Copy } from '@stevederico/skateboard-ui/icons';
 
 /**
  * Individual thumbnail card with canvas preview and hover actions
