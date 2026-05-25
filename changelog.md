@@ -3,6 +3,20 @@
 ## To-Do
 - CLI tool (browserless usage)
 
+0.12.0
+
+  Upgrade to skateboard 3.4.0 boilerplate
+  Update skateboard-ui to 3.7.0
+  Migrate react-router-dom to react-router 7.15.0
+  Update React to 19.2.6, Vite to 8.0.13, Tailwind to 4.3.0
+  Migrate lucide-react icons to skateboard-ui/icons
+  Drop unused deps (@dnd-kit/*, @tanstack/react-table, recharts, zod, next-themes, tailwindcss-animate)
+  Remove use-sync-external-store shim plugin
+
+0.11.1
+
+  Document CLI setup
+
 0.11.0
 
   Add Icon Resizer

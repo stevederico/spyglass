@@ -18,6 +18,15 @@ npm run prod           # Production build
 npm install-all        # Install all dependencies (root + workspace)
 ```
 
+**CLI (`@spyglass/cli`):**
+The `cli/` workspace publishes a `spyglass` binary for iOS App Store screenshot automation. It is not on npm — install it globally via symlink from this repo:
+```bash
+cd cli && npm link            # registers `spyglass` globally
+spyglass --help               # verify
+npm unlink -g @spyglass/cli   # remove the global link
+```
+Verify with `npm ls -g --depth=0 | grep spyglass`.
+
 ## Code Standards
 
 ### Documentation Requirements

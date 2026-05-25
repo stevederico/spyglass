@@ -22,7 +22,7 @@ import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
 import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
 import { toast } from 'sonner';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown } from '@stevederico/skateboard-ui/icons';
 import { STARTER_TEMPLATES } from './composerHelpers.js';
 
 export default function TemplatePanel({ currentState, onLoadTemplate, appId, selectedFont, onFontChange }) {
