@@ -3,7 +3,6 @@
 // Mount on the main app via: app.route('/api', ascApp)
 
 import { Hono } from 'hono';
-import jwt from 'jsonwebtoken';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { exec } from 'node:child_process';
@@ -28,7 +27,31 @@ function getASCErrorStatus(error) {
 }
 
 const ASC_BASE_URL = 'https://api.appstoreconnect.apple.com/v1';
-const TOKEN_EXPIRY = '20m';
+const TOKEN_EXPIRY_SECONDS = 20 * 60; // 20 minutes
+
+/**
+ * Sign an ES256 JWT for the App Store Connect API using node:crypto.
+ *
+ * Produces an ES256-signed token byte-compatible with jsonwebtoken: the
+ * signature is emitted in JOSE form (raw r||s, IEEE P1363) via the
+ * `dsaEncoding: 'ieee-p1363'` option, which is what JWT verifiers expect.
+ *
+ * @param {Object} payload - JWT claims (iss, aud, iat, exp)
+ * @param {KeyObject|Buffer|string} privateKey - EC P-256 private key (PEM)
+ * @param {Object} header - JWT header fields merged with { alg: 'ES256' }
+ * @returns {string} Compact ES256 JWT string
+ */
+function signES256(payload, privateKey, header) {
+  const head = Buffer.from(JSON.stringify({ alg: 'ES256', ...header })).toString('base64url');
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signingInput = `${head}.${body}`;
+  const sig = crypto
+    .createSign('SHA256')
+    .update(signingInput)
+    .sign({ key: privateKey, dsaEncoding: 'ieee-p1363' })
+    .toString('base64url');
+  return `${signingInput}.${sig}`;
+}
 
 /** Status bar pixel heights by device name, used for auto-cropping screenshots. */
 const STATUS_BAR_HEIGHTS = {
@@ -65,13 +88,15 @@ function generateASCToken() {
   const keyPath = path.resolve(__dirname, ASC_PRIVATE_KEY_PATH);
   const privateKey = readFileSync(keyPath);
 
-  return jwt.sign({}, privateKey, {
-    algorithm: 'ES256',
-    expiresIn: TOKEN_EXPIRY,
-    issuer: ASC_ISSUER_ID,
-    audience: 'appstoreconnect-v1',
-    header: { kid: ASC_KEY_ID, typ: 'JWT' }
-  });
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    iss: ASC_ISSUER_ID,
+    iat: now,
+    exp: now + TOKEN_EXPIRY_SECONDS,
+    aud: 'appstoreconnect-v1'
+  };
+
+  return signES256(payload, privateKey, { kid: ASC_KEY_ID, typ: 'JWT' });
 }
 
 /**
