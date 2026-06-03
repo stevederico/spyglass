@@ -50,9 +50,10 @@ const htmlReplacePlugin = () => {
  * Dynamic robots.txt generation plugin
  *
  * Generates robots.txt at build time with:
- * - Open crawling for all bots and AI search bots
- * - Blocks training-only crawlers (CCBot)
+ * - Bot-specific rules (Googlebot, Bingbot, Applebot, social crawlers)
+ * - Protected routes (/app/, /console/, /signin/, /signup/)
  * - Sitemap reference from constants.json
+ * - Disallows all other bots from entire site
  *
  * @returns {import('vite').Plugin} Vite plugin object
  */
@@ -233,7 +234,7 @@ export default defineConfig({
     drop: []
   },
   resolve: {
-    dedupe: ['react', 'react-dom'],
+    dedupe: ['react', 'react-dom', 'react-router-dom', 'react-router'],
     alias: {
       '@': path.resolve(process.cwd(), './src'),
       '@package': path.resolve(process.cwd(), 'package.json'),
@@ -249,6 +250,7 @@ export default defineConfig({
       'react-dom',
       'react-dom/client',
       '@radix-ui/react-slot',
+      'react-router-dom',
       'react-router',
       'cookie',
       'set-cookie-parser'
@@ -299,10 +301,5 @@ export default defineConfig({
       ignored: ['**/node_modules/**', '**/.git/**']
     }
   },
-  logLevel: 'error',
-  test: {
-    globals: true,
-    environment: 'jsdom',
-    exclude: ['node_modules/**', 'backend/**']
-  }
+  logLevel: 'error'
 });
