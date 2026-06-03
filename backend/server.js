@@ -9,19 +9,10 @@ import Stripe from "stripe";
 import { compare as legacyBcryptCompare } from "./vendor/legacy-bcrypt.js";
 import crypto from "crypto";
 
-import ascApp from './asc.js';
-import translateApp from './translate.js';
-import aiApp from './ai.js';
-import templatesApp from './templates.js';
-import metadataHistoryApp from './metadataHistory.js';
-import exportsApp from './exports.js';
-import iconsApp from './icons.js';
-import precheckApp from './precheck.js';
-import keywordsApp from './keywords.js';
 import { databaseManager } from "./adapters/manager.js";
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFile, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { readFile, mkdir, stat, readFileSync, writeFileSync, statSync } from 'node:fs';
 import { promisify } from 'node:util';
 
 // ==== SERVER CONFIG ====
@@ -80,8 +71,8 @@ const CSRF_MAX_ENTRIES = 50000; // LRU eviction threshold
 /**
  * LRU eviction helper that removes oldest entries when over limit
  *
- * Prevents memory leaks in rate limiter and CSRF stores by removing oldest
- * entries based on timestamp when store exceeds maxEntries threshold.
+ * Prevents memory leaks in CSRF store by removing oldest entries based on
+ * timestamp when store exceeds maxEntries threshold.
  *
  * @param {Map} store - Map to evict entries from
  * @param {number} maxEntries - Maximum entries before eviction
@@ -209,117 +200,6 @@ setInterval(() => {
     logger.debug('CSRF cleanup completed', { removedTokens: cleaned });
   }
 }, 60 * 60 * 1000); // Run every hour
-
-// ==== RATE LIMITING ====
-const rateLimitStore = new Map(); // key -> { count, resetAt }
-const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
-const RATE_LIMIT_MAX_ENTRIES = 100000; // LRU eviction threshold
-
-// Route-specific rate limits
-const RATE_LIMITS = {
-  auth: { limit: 10, window: RATE_LIMIT_WINDOW },       // /api/signin, /api/signup
-  payment: { limit: 5, window: RATE_LIMIT_WINDOW },     // /api/checkout, /api/portal
-  global: { limit: 300, window: RATE_LIMIT_WINDOW }     // all other /api routes
-};
-
-/**
- * Get client IP address from request
- *
- * Checks X-Forwarded-For header first (for proxies), falls back to
- * socket address. Handles comma-separated forwarded IPs.
- *
- * @param {Context} c - Hono context
- * @returns {string} Client IP address
- */
-function getClientIP(c) {
-  const forwarded = c.req.header('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-  return c.req.raw?.socket?.remoteAddress || 'unknown';
-}
-
-/**
- * Get rate limit category for a given path
- *
- * @param {string} path - Request path
- * @returns {string} Rate limit category: 'auth', 'payment', or 'global'
- */
-function getRateLimitCategory(path) {
-  if (path === '/api/signin' || path === '/api/signup') {
-    return 'auth';
-  }
-  if (path === '/api/checkout' || path === '/api/portal') {
-    return 'payment';
-  }
-  return 'global';
-}
-
-/**
- * Rate limiting middleware
- *
- * Tracks requests per IP+category with sliding window. Returns 429 when
- * limit exceeded. Adds X-RateLimit-Remaining and Retry-After headers.
- *
- * @async
- * @param {Context} c - Hono context
- * @param {Function} next - Next middleware function
- * @returns {Promise<Response|void>} 429 error or continues to next middleware
- */
-async function rateLimitMiddleware(c, next) {
-  // Skip rate limiting for health check and static files
-  if (c.req.path === '/api/health' || !c.req.path.startsWith('/api/')) {
-    return next();
-  }
-
-  const ip = getClientIP(c);
-  const category = getRateLimitCategory(c.req.path);
-  const { limit, window } = RATE_LIMITS[category];
-  const key = `${ip}:${category}`;
-  const now = Date.now();
-
-  let record = rateLimitStore.get(key);
-
-  // Reset if window expired
-  if (!record || now > record.resetAt) {
-    record = { count: 0, resetAt: now + window };
-    rateLimitStore.set(key, record);
-  }
-
-  record.count++;
-
-  // Check if over limit
-  if (record.count > limit) {
-    const retryAfter = Math.ceil((record.resetAt - now) / 1000);
-    c.header('Retry-After', String(retryAfter));
-    c.header('X-RateLimit-Remaining', '0');
-    logger.info('Rate limit exceeded', { ip, category, path: c.req.path });
-    return c.json({ error: 'Too many requests' }, 429);
-  }
-
-  c.header('X-RateLimit-Remaining', String(limit - record.count));
-  await next();
-}
-
-// Cleanup expired rate limit entries every 15 minutes
-setInterval(() => {
-  const now = Date.now();
-  let cleaned = 0;
-
-  for (const [key, record] of rateLimitStore.entries()) {
-    if (now > record.resetAt) {
-      rateLimitStore.delete(key);
-      cleaned++;
-    }
-  }
-
-  // LRU eviction if still over limit
-  evictOldestEntries(rateLimitStore, RATE_LIMIT_MAX_ENTRIES, (data) => data.resetAt);
-
-  if (cleaned > 0) {
-    logger.debug('Rate limit cleanup completed', { removedEntries: cleaned });
-  }
-}, 15 * 60 * 1000);
 
 // ==== ACCOUNT LOCKOUT ====
 const loginAttemptStore = new Map(); // email -> { attempts, lockedUntil }
@@ -557,6 +437,7 @@ const db = {
   updateUser: (query, update) => databaseManager.updateUser(currentDbConfig.dbType, currentDbConfig.db, currentDbConfig.connectionString, query, update),
   findAuth: (query) => databaseManager.findAuth(currentDbConfig.dbType, currentDbConfig.db, currentDbConfig.connectionString, query),
   insertAuth: (authData) => databaseManager.insertAuth(currentDbConfig.dbType, currentDbConfig.db, currentDbConfig.connectionString, authData),
+  updateAuth: (query, update) => databaseManager.updateAuth(currentDbConfig.dbType, currentDbConfig.db, currentDbConfig.connectionString, query, update),
   findWebhookEvent: (eventId) => databaseManager.findWebhookEvent(currentDbConfig.dbType, currentDbConfig.db, currentDbConfig.connectionString, eventId),
   insertWebhookEvent: (eventId, eventType, processedAt) => databaseManager.insertWebhookEvent(currentDbConfig.dbType, currentDbConfig.db, currentDbConfig.connectionString, eventId, eventType, processedAt),
   executeQuery: (queryObject) => databaseManager.executeQuery(currentDbConfig.dbType, currentDbConfig.db, currentDbConfig.connectionString, queryObject)
@@ -582,9 +463,6 @@ app.use('*', cors({
   credentials: true
 }));
 
-// Rate limiting middleware
-app.use('*', rateLimitMiddleware);
-
 // Apache Common Log Format middleware
 app.use('*', async (c, next) => {
   const start = Date.now();
@@ -595,18 +473,18 @@ app.use('*', async (c, next) => {
   const status = c.res.status;
   const duration = Date.now() - start;
 
-  if (!isProd()) console.log(`[${timestamp}] "${method} ${url}" ${status} (${duration}ms)`);
+  console.log(`[${timestamp}] "${method} ${url}" ${status} (${duration}ms)`);
 });
 
 // Security headers middleware
 app.use('*', secureHeaders({
   contentSecurityPolicy: {
     defaultSrc: ["'self'"],
-    scriptSrc: ["'self'", "'unsafe-inline'", "https://static.cloudflareinsights.com", "https://aob.bixbyapps.com"],
+    scriptSrc: ["'self'", "'unsafe-inline'"],
     styleSrc: ["'self'", "'unsafe-inline'"],
     imgSrc: ["'self'", "https:"],
     fontSrc: ["'self'"],
-    connectSrc: ["'self'", "https://aob.bixbyapps.com"],
+    connectSrc: ["'self'"],
     frameAncestors: ["'none'"]
   },
   strictTransportSecurity: !isProd() ? false : 'max-age=31536000; includeSubDomains; preload',
@@ -624,7 +502,7 @@ app.use('*', secureHeaders({
 // Request logging middleware (dev only)
 app.use('*', async (c, next) => {
   if (!isProd()) {
-    const requestId = crypto.randomUUID();
+    const requestId = Math.random().toString(36).substr(2, 9);
     logger.debug('Request received', { method: c.req.method, path: c.req.path, requestId });
   }
   await next();
@@ -936,6 +814,56 @@ function setAuthCookies(c, userID, jwtToken) {
 }
 
 // ==== STRIPE WEBHOOK (raw body needed) ====
+
+/**
+ * Resolve a Stripe customer ID to a normalized lowercase email.
+ *
+ * @param {string} stripeID - Stripe customer ID
+ * @returns {Promise<string|null>} Normalized email, or null if missing
+ */
+async function resolveCustomerEmail(stripeID) {
+  const customer = await stripe.customers.retrieve(stripeID);
+  if (!customer?.email) {
+    logger.warn('Webhook: Customer has no email', { stripeID });
+    return null;
+  }
+  return customer.email.toLowerCase();
+}
+
+/**
+ * Build the canonical user.subscription patch from a Stripe customer ID
+ * and a Stripe subscription object.
+ *
+ * @param {string} stripeID - Stripe customer ID
+ * @param {object} stripeSub - Stripe subscription object
+ * @returns {{stripeID: string, expires: number, status: string}}
+ */
+function buildSubscriptionPatch(stripeID, stripeSub) {
+  return {
+    stripeID,
+    expires: stripeSub.current_period_end,
+    status: stripeSub.status
+  };
+}
+
+/**
+ * Apply a $set patch to the user identified by email. Returns false if no
+ * matching user is found (silent no-op so Stripe will not retry).
+ *
+ * @param {string} email - Normalized email
+ * @param {object} $set - MongoDB-style $set fields
+ * @returns {Promise<boolean>} True if a user was patched
+ */
+async function applyUserPatch(email, $set) {
+  const user = await db.findUser({ email });
+  if (!user) {
+    logger.warn('Webhook: No user found for email', { email });
+    return false;
+  }
+  await db.updateUser({ email }, { $set });
+  return true;
+}
+
 app.post("/api/payment", async (c) => {
   logger.info('Payment webhook received');
 
@@ -965,81 +893,56 @@ app.post("/api/payment", async (c) => {
 
     const eventObject = event.data.object;
 
-    // Handle subscription lifecycle events
     if (["customer.subscription.deleted", "customer.subscription.updated", "customer.subscription.created"].includes(event.type)) {
       const { customer: stripeID, current_period_end, status } = eventObject;
       if (!stripeID) {
         logger.error('Webhook missing customer ID', { type: event.type });
         return c.body(null, 400);
       }
-
-      const customer = await stripe.customers.retrieve(stripeID);
-      if (!customer || !customer.email) {
-        logger.error('Webhook: Customer has no email', { stripeID });
-        return c.body(null, 400);
-      }
-
-      const customerEmail = customer.email.toLowerCase();
-      const user = await db.findUser({ email: customerEmail });
-      if (user) {
-        await db.updateUser({ email: customerEmail }, {
-          $set: { subscription: { stripeID, expires: current_period_end, status } }
-        });
-        logger.info('Subscription updated', { type: event.type, email: customerEmail, status });
-      } else {
-        logger.warn('Webhook: No user found for email', { email: customerEmail });
-      }
+      const email = await resolveCustomerEmail(stripeID);
+      if (!email) return c.body(null, 400);
+      const ok = await applyUserPatch(email, { subscription: { stripeID, expires: current_period_end, status } });
+      if (ok) logger.info('Subscription updated', { type: event.type, email, status });
     }
 
-    // Handle checkout session completed (initial subscription)
     if (event.type === "checkout.session.completed") {
       const { customer: stripeID, customer_email, subscription: subscriptionId } = eventObject;
       if (subscriptionId && stripeID) {
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const customerEmail = (customer_email || (await stripe.customers.retrieve(stripeID)).email).toLowerCase();
-        const user = await db.findUser({ email: customerEmail });
-        if (user) {
-          await db.updateUser({ email: customerEmail }, {
-            $set: { subscription: { stripeID, expires: subscription.current_period_end, status: subscription.status } }
-          });
-          logger.info('Checkout completed', { email: customerEmail, status: subscription.status });
+        const [subscription, email] = await Promise.all([
+          stripe.subscriptions.retrieve(subscriptionId),
+          customer_email ? Promise.resolve(customer_email.toLowerCase()) : resolveCustomerEmail(stripeID)
+        ]);
+        if (email) {
+          const ok = await applyUserPatch(email, { subscription: buildSubscriptionPatch(stripeID, subscription) });
+          if (ok) logger.info('Checkout completed', { email, status: subscription.status });
         }
       }
     }
 
-    // Handle invoice paid (recurring payment success)
     if (event.type === "invoice.paid") {
       const { customer: stripeID, subscription: subscriptionId } = eventObject;
       if (subscriptionId && stripeID) {
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const customer = await stripe.customers.retrieve(stripeID);
-        if (customer?.email) {
-          const customerEmail = customer.email.toLowerCase();
-          const user = await db.findUser({ email: customerEmail });
-          if (user) {
-            await db.updateUser({ email: customerEmail }, {
-              $set: { subscription: { stripeID, expires: subscription.current_period_end, status: subscription.status } }
-            });
-            logger.info('Invoice paid', { email: customerEmail });
-          }
+        const [subscription, email] = await Promise.all([
+          stripe.subscriptions.retrieve(subscriptionId),
+          resolveCustomerEmail(stripeID)
+        ]);
+        if (email) {
+          const ok = await applyUserPatch(email, { subscription: buildSubscriptionPatch(stripeID, subscription) });
+          if (ok) logger.info('Invoice paid', { email });
         }
       }
     }
 
-    // Handle invoice payment failed
     if (event.type === "invoice.payment_failed") {
       const { customer: stripeID } = eventObject;
       if (stripeID) {
-        const customer = await stripe.customers.retrieve(stripeID);
-        if (customer?.email) {
-          const customerEmail = customer.email.toLowerCase();
-          const user = await db.findUser({ email: customerEmail });
-          if (user) {
-            await db.updateUser({ email: customerEmail }, {
-              $set: { 'subscription.paymentFailed': true, 'subscription.paymentFailedAt': Date.now() }
-            });
-            logger.warn('Invoice payment failed', { email: customerEmail });
-          }
+        const email = await resolveCustomerEmail(stripeID);
+        if (email) {
+          const ok = await applyUserPatch(email, {
+            'subscription.paymentFailed': true,
+            'subscription.paymentFailedAt': Date.now()
+          });
+          if (ok) logger.warn('Invoice payment failed', { email });
         }
       }
     }
@@ -1195,7 +1098,7 @@ app.post("/api/signin", async (c) => {
     if (needsRehash(auth.password)) {
       try {
         const newHash = await hashPassword(password);
-        await db.executeQuery({ query: 'UPDATE Auths SET password = ? WHERE email = ?', params: [newHash, email] });
+        await db.updateAuth({ email }, { password: newHash });
         logger.debug('Password hash migrated to scrypt');
       } catch (e) {
         logger.warn('Password rehash failed', { error: e.message });
@@ -1485,45 +1388,17 @@ app.post("/api/portal", authMiddleware, csrfProtection, async (c) => {
   }
 });
 
-// ==== APP STORE CONNECT API ====
-app.route('/api', ascApp);
-
-// ==== TRANSLATION API ====
-app.route('/api', translateApp);
-
-// ==== AI METADATA GENERATION ====
-app.route('/api', aiApp);
-app.route('/api', templatesApp);
-app.route('/api', metadataHistoryApp);
-app.route('/api', exportsApp);
-
-// ==== ICON RESIZER ====
-app.route('/api', iconsApp);
-
-// ==== METADATA PRECHECK ====
-app.route('/api', precheckApp);
-
-// ==== KEYWORD RESEARCH ====
-app.route('/api', keywordsApp);
-
 // ==== STATIC FILE SERVING (Production) ====
-// All /api/* routes are handled above. Everything else is static/SPA.
 const staticDir = resolve(__dirname, config.staticDir);
 
-// Serve static assets with correct MIME types
-app.use('/assets/*', serveStatic({ root: staticDir }));
-app.use('/frames/*', serveStatic({ root: staticDir }));
-app.use('/icons/*', serveStatic({ root: staticDir }));
-app.use('/manifest.json', serveStatic({ root: staticDir, path: '/manifest.json' }));
-app.use('/robots.txt', serveStatic({ root: staticDir, path: '/robots.txt' }));
-app.use('/sitemap.xml', serveStatic({ root: staticDir, path: '/sitemap.xml' }));
+// Serve static files
+app.use('/*', serveStatic({ root: staticDir }));
 
-// SPA fallback - serve index.html for all non-API routes
+// SPA fallback — only for non-asset routes
 app.get('*', async (c) => {
-  if (c.req.path.startsWith('/api/')) {
-    return c.json({ error: 'Not found' }, 404);
+  if (c.req.path.startsWith('/api/') || c.req.path.match(/\.\w+$/)) {
+    return c.notFound();
   }
-
   try {
     const indexPath = resolve(staticDir, 'index.html');
     const file = await promisify(readFile)(indexPath);
@@ -1535,7 +1410,7 @@ app.get('*', async (c) => {
 
 // ==== ERROR HANDLER ====
 app.onError((err, c) => {
-  const requestId = crypto.randomUUID();
+  const requestId = Math.random().toString(36).substr(2, 9);
 
   logger.error('Unhandled error occurred', {
     message: err.message,
@@ -1566,11 +1441,12 @@ function isProd() {
 }
 
 /**
- * Load environment variables from local .env file
+ * Load environment variables from .env and optional .env.local file.
  *
- * Reads key=value pairs from backend/.env into process.env. Creates .env
- * from .env.example if it doesn't exist. Handles quoted values, comments,
- * and values containing '=' characters. Only called in non-production mode.
+ * Reads in two passes: backend/.env first (may be symlink to shared creds),
+ * then backend/.env.local for project-specific overrides (wins on conflict).
+ * Creates .env from .env.example if it doesn't exist. Only called in
+ * non-production mode — Railway injects vars directly in prod.
  *
  * @returns {void}
  */
@@ -1601,6 +1477,13 @@ function loadLocalENV() {
   loadEnvFile(envLocalPath);
 }
 
+/**
+ * Parse a .env file and apply key=value pairs to process.env.
+ * Skips blank lines and comments. Handles quoted values and values containing '='.
+ * Silently skips if file doesn't exist.
+ * @param {string} filePath - Absolute path to the .env file
+ * @returns {void}
+ */
 function loadEnvFile(filePath) {
   try {
     const data = readFileSync(filePath, 'utf8');
