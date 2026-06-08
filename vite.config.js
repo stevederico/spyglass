@@ -221,6 +221,12 @@ const dynamicManifestPlugin = () => {
 // ===== VITE CONFIGURATION =====
 
 export default defineConfig({
+  // Vitest config: frontend tests need a DOM (jsdom). Backend tests use the
+  // node:test runner (run via `node --test`), so exclude them here.
+  test: {
+    environment: 'jsdom',
+    exclude: ['**/node_modules/**', '**/dist/**', 'backend/**']
+  },
   plugins: [
     react(),
     tailwindcss(),

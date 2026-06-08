@@ -14,7 +14,8 @@
     "build": "vite build --mode production",
     "prod": "vite build --mode production",
     "install-all": "npm install && npm install --workspace=backend",
-    "test": "vitest run",
+    "test": "vitest run && npm run test:backend",
+    "test:backend": "node --test backend/*.test.js",
     "test:watch": "vitest",
     "verify:ui": "node scripts/verify-ui-version.mjs"
   },
