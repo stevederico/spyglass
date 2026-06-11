@@ -65,6 +65,27 @@ async function updateUser(userId, email) { ... }
 
 **Out-of-date documentation is worse than no documentation** - it misleads developers and wastes debugging time. Always keep docs in sync with code.
 
+## TypeScript Standards
+
+### Style
+
+- TypeScript everywhere — `.ts` / `.tsx` files, `strict` mode always on
+- `@types` packages are dev-only dependencies (`@types/node`, `@types/react`, `@types/react-dom`)
+- No build-step typechecking: `npm run typecheck` runs `tsc --noEmit`; it gates `build` and `test`
+- Always use ES modules — never use `require()`
+
+### TypeScript Anti-Patterns (prohibited)
+
+All of these silence the compiler instead of proving correctness:
+
+- Never use `any` — use `unknown` and narrow with type guards
+- Never use `as` casts to silence errors (especially `as unknown as X`) — prove the type instead
+- Never use `!` non-null assertions — handle the null/undefined case
+- Never use `@ts-ignore` — if truly unavoidable, use `@ts-expect-error` with a reason comment (it fails when the error goes away)
+- Never disable or loosen `strict` in tsconfig
+- Never use loose built-in types (`Function`, `object`, `{}`) — write precise signatures and shapes
+- Never cast unvalidated data at boundaries — no `JSON.parse(x) as User` without a runtime check
+
 ## Architecture Overview
 
 ### Application Shell Architecture (v1.1)
@@ -89,15 +110,15 @@ skateboard/
 │   ├── components/       # Your custom components (e.g., HomeView.jsx)
 │   ├── assets/
 │   │   └── styles.css   # Brand color override (7 lines)
-│   ├── main.jsx         # Route definitions (16 lines)
+│   ├── main.tsx         # Route definitions (16 lines)
 │   └── constants.json   # All your app config
 ├── backend/
-│   ├── server.js        # Hono server
+│   ├── server.ts        # Hono server
 │   ├── adapters/        # Database adapters (SQLite)
 │   ├── databases/       # SQLite database files
 │   └── config.json      # Backend config with database settings
 ├── package.json         # Dependencies (includes skateboard-ui)
-└── vite.config.js       # Vite configuration (app-owned)
+└── vite.config.ts       # Vite configuration (app-owned)
 ```
 
 **What's NOT in your app (provided by skateboard-ui):**
@@ -111,8 +132,8 @@ skateboard/
 The application uses SQLite via Node.js built-in DatabaseSync.
 
 **Database Adapters** (`backend/adapters/`):
-- `sqlite.js` - SQLite provider using Node.js built-in DatabaseSync
-- `manager.js` - Unified interface and provider selection
+- `sqlite.ts` - SQLite provider using Node.js built-in DatabaseSync
+- `manager.ts` - Unified interface and provider selection
 
 **Configuration** (`backend/config.json`):
 ```json
@@ -129,7 +150,7 @@ The application uses SQLite via Node.js built-in DatabaseSync.
 ### Authentication & Security
 - JWT tokens in HttpOnly cookies
 - CSRF token protection for state-changing operations
-- Bcrypt password hashing with 10 salt rounds
+- Scrypt password hashing via `node:crypto` (legacy bcrypt hashes verified and lazily rehashed on signin)
 - JWT with 30-day expiration
 - Rate limiting (10 req/15min for auth, 300 req/15min global)
 - Security headers (CSP, HSTS, X-Frame-Options, etc.)
@@ -137,7 +158,7 @@ The application uses SQLite via Node.js built-in DatabaseSync.
 ### Build System Integration
 
 **Vite Configuration** (v1.1+ app-owned):
-Apps own their `vite.config.js` directly. See [reference implementation](https://github.com/stevederico/skateboard/blob/master/vite.config.js).
+Apps own their `vite.config.ts` directly. See [reference implementation](https://github.com/stevederico/skateboard/blob/master/vite.config.ts).
 
 **Styling:**
 ```css
@@ -264,9 +285,9 @@ This project was created from the skateboard boilerplate. The `skateboardVersion
 5. Update `skateboardVersion` field after applying changes
 
 ### Safe to Update (review and apply)
-- `backend/server.js` - Server logic, security updates
+- `backend/server.ts` - Server logic, security updates
 - `backend/adapters/*` - Database adapters
-- `vite.config.js` - Build configuration
+- `vite.config.ts` - Build configuration
 - `src/assets/styles.css` - Theme variables (merge carefully)
 
 ### Never Auto-Update (app-specific)
