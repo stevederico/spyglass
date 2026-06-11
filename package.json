@@ -2,7 +2,7 @@
   "name": "spyglass",
   "private": false,
   "version": "0.12.0",
-  "skateboardVersion": "3.6.1",
+  "skateboardVersion": "3.9.0",
   "type": "module",
   "workspaces": [
     "backend"
@@ -11,16 +11,18 @@
     "start": "npm run front & npm run server",
     "front": "vite --force --mode development",
     "server": "npm run --workspace=backend dev",
-    "build": "vite build --mode production",
-    "prod": "vite build --mode production",
+    "build": "npm run typecheck && vite build --mode production",
+    "prod": "npm run typecheck && vite build --mode production",
     "install-all": "npm install && npm install --workspace=backend",
     "test": "vitest run && npm run test:backend",
     "test:backend": "node --test backend/*.test.js",
     "test:watch": "vitest",
-    "verify:ui": "node scripts/verify-ui-version.mjs"
+    "verify:ui": "node scripts/verify-ui-version.mjs",
+    "postinstall": "git config core.hooksPath .githooks || true",
+    "typecheck": "tsc -p tsconfig.json && tsc -p backend/tsconfig.json"
   },
   "dependencies": {
-    "@stevederico/skateboard-ui": "3.8.1",
+    "@stevederico/skateboard-ui": "3.12.0",
     "fflate": "^0.8.2",
     "react": "19.2.6",
     "react-dom": "19.2.6",
@@ -29,9 +31,13 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.3.0",
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.16",
+    "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react-swc": "4.3.1",
     "jsdom": "^29.0.0",
     "tailwindcss": "4.3.0",
+    "typescript": "6.0.3",
     "vite": "8.0.13",
     "vitest": "^4.1.0"
   },
