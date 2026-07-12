@@ -20,10 +20,14 @@ export type HistoryState = Partial<Slot>;
  * @param slot - A slot object containing design properties
  * @returns Snapshot of history-relevant fields
  */
+function copyField<K extends keyof Slot>(target: HistoryState, source: Slot, key: K): void {
+  target[key] = source[key];
+}
+
 function extractHistoryState(slot: Slot): HistoryState {
   const state: HistoryState = {};
   for (const key of HISTORY_FIELDS) {
-    state[key] = slot[key];
+    copyField(state, slot, key);
   }
   return state;
 }

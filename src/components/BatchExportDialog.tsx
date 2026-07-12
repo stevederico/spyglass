@@ -77,8 +77,8 @@ function ascFilename(locale: string, position: number, deviceKey: string): strin
  * @param state - Full composer state with device override
  * @returns PNG data as byte array
  */
-function renderToBytes(state: ComposerState): Promise<Uint8Array> {
-  return new Promise<Uint8Array>((resolve) => {
+function renderToBytes(state: ComposerState): Promise<Uint8Array<ArrayBuffer>> {
+  return new Promise<Uint8Array<ArrayBuffer>>((resolve) => {
     const timeout = setTimeout(() => resolve(new Uint8Array(0)), 10000);
     try {
       const canvas = document.createElement('canvas');
@@ -199,7 +199,7 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
     setProgress(0);
     setProgressLabel('Starting...');
 
-    const files: Record<string, Uint8Array> = {};
+    const files: Record<string, Uint8Array<ArrayBuffer>> = {};
     let completed = 0;
     const total = selectedDevices.size * selectedLocales.size * slotCount;
     const localeArray = [...selectedLocales];
