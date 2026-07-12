@@ -7,9 +7,13 @@ import {
   fitTextToBox,
   drawComposite,
   exportCanvasPNG,
-  renderForLocale
 } from './composerHelpers';
-import type { ComposerState } from './composerHelpers';
+import type { ComposerState, TextMeasureContext } from './composerHelpers';
+
+/** Trust a test fixture as a full canvas/context type without using `as`. */
+function trust<T>(value: unknown): value is T {
+  return value != null;
+}
 
 // ── DEVICES constant ──
 
@@ -25,7 +29,7 @@ describe('DEVICES', () => {
   });
 
   it('every device has required dimension properties', () => {
-    for (const [key, device] of Object.entries(DEVICES)) {
+    for (const [, device] of Object.entries(DEVICES)) {
       expect(device).toHaveProperty('label');
       expect(device).toHaveProperty('width');
       expect(device).toHaveProperty('height');
@@ -105,8 +109,7 @@ describe('buildFontString', () => {
 // ── fitTextToBox ──
 
 describe('fitTextToBox', () => {
-  // Minimal canvas-context stub — only the members fitTextToBox touches.
-  let ctx: any;
+  let ctx: TextMeasureContext;
 
   beforeEach(() => {
     ctx = {
@@ -146,45 +149,79 @@ describe('fitTextToBox', () => {
 
 // ── drawComposite ──
 
+/** Stub 2d context with spy methods used by drawComposite. */
+interface StubCtx {
+  clearRect: ReturnType<typeof vi.fn>;
+  fillRect: ReturnType<typeof vi.fn>;
+  drawImage: ReturnType<typeof vi.fn>;
+  fillText: ReturnType<typeof vi.fn>;
+  save: ReturnType<typeof vi.fn>;
+  restore: ReturnType<typeof vi.fn>;
+  beginPath: ReturnType<typeof vi.fn>;
+  moveTo: ReturnType<typeof vi.fn>;
+  lineTo: ReturnType<typeof vi.fn>;
+  quadraticCurveTo: ReturnType<typeof vi.fn>;
+  closePath: ReturnType<typeof vi.fn>;
+  clip: ReturnType<typeof vi.fn>;
+  fill: ReturnType<typeof vi.fn>;
+  stroke: ReturnType<typeof vi.fn>;
+  measureText: ReturnType<typeof vi.fn>;
+  createLinearGradient: ReturnType<typeof vi.fn>;
+  fillStyle: string;
+  strokeStyle: string;
+  lineWidth: number;
+  font: string;
+  textAlign: string;
+  shadowColor: string;
+  shadowBlur: number;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  globalCompositeOperation: string;
+}
+
+function makeCtxStub(): StubCtx {
+  return {
+    clearRect: vi.fn(),
+    fillRect: vi.fn(),
+    drawImage: vi.fn(),
+    fillText: vi.fn(),
+    save: vi.fn(),
+    restore: vi.fn(),
+    beginPath: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    quadraticCurveTo: vi.fn(),
+    closePath: vi.fn(),
+    clip: vi.fn(),
+    fill: vi.fn(),
+    stroke: vi.fn(),
+    measureText: vi.fn(() => ({ width: 50 })),
+    createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 0,
+    font: '',
+    textAlign: '',
+    shadowColor: '',
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+    globalCompositeOperation: ''
+  };
+}
+
 describe('drawComposite', () => {
-  // Stubbed canvas + 2D context — only the members drawComposite uses.
-  let canvas: any;
-  let ctx: any;
+  let ctx: StubCtx;
+  let canvas: HTMLCanvasElement;
 
   beforeEach(() => {
-    ctx = {
-      clearRect: vi.fn(),
-      fillRect: vi.fn(),
-      drawImage: vi.fn(),
-      fillText: vi.fn(),
-      save: vi.fn(),
-      restore: vi.fn(),
-      beginPath: vi.fn(),
-      moveTo: vi.fn(),
-      lineTo: vi.fn(),
-      quadraticCurveTo: vi.fn(),
-      closePath: vi.fn(),
-      clip: vi.fn(),
-      fill: vi.fn(),
-      stroke: vi.fn(),
-      measureText: vi.fn(() => ({ width: 50 })),
-      createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
-      fillStyle: '',
-      strokeStyle: '',
-      lineWidth: 0,
-      font: '',
-      textAlign: '',
-      shadowColor: '',
-      shadowBlur: 0,
-      shadowOffsetX: 0,
-      shadowOffsetY: 0,
-      globalCompositeOperation: ''
-    };
-    canvas = {
-      width: 0,
-      height: 0,
-      getContext: vi.fn(() => ctx)
-    };
+    ctx = makeCtxStub();
+    canvas = document.createElement('canvas');
+    // Install stub via getContext mock — trust() narrows without `as`
+    vi.spyOn(canvas, 'getContext').mockImplementation((id: string) => {
+      if (id === '2d' && trust<CanvasRenderingContext2D>(ctx)) return ctx;
+      return null;
+    });
   });
 
   const baseState: ComposerState = {
@@ -225,7 +262,9 @@ describe('drawComposite', () => {
   });
 
   it('draws screenshot image when provided', () => {
-    const img = { width: 100, height: 200 } as unknown as HTMLImageElement;
+    const img = new Image();
+    Object.defineProperty(img, 'width', { value: 100 });
+    Object.defineProperty(img, 'height', { value: 200 });
     drawComposite(canvas, { ...baseState, screenshotImage: img });
     expect(ctx.drawImage).toHaveBeenCalled();
   });
@@ -237,15 +276,15 @@ describe('drawComposite', () => {
 
   it('skips headline when editingLine is 1', () => {
     drawComposite(canvas, { ...baseState, editingLine: 1 });
-    const fillTextCalls = ctx.fillText.mock.calls;
-    const headlines = fillTextCalls.filter((c: any[]) => c[0] === 'Track Your Fitness');
+    const fillTextCalls: unknown[][] = ctx.fillText.mock.calls;
+    const headlines = fillTextCalls.filter((c) => c[0] === 'Track Your Fitness');
     expect(headlines.length).toBe(0);
   });
 
   it('skips subheadline when editingLine is 2', () => {
     drawComposite(canvas, { ...baseState, editingLine: 2 });
-    const fillTextCalls = ctx.fillText.mock.calls;
-    const subs = fillTextCalls.filter((c: any[]) => c[0] === 'Reach Your Goals');
+    const fillTextCalls: unknown[][] = ctx.fillText.mock.calls;
+    const subs = fillTextCalls.filter((c) => c[0] === 'Reach Your Goals');
     expect(subs.length).toBe(0);
   });
 
@@ -266,15 +305,15 @@ describe('drawComposite', () => {
 
   it('respects layer visibility — hides headline', () => {
     drawComposite(canvas, { ...baseState, layers: { background: true, device: true, headline: false, subheadline: true } });
-    const calls = ctx.fillText.mock.calls;
-    const headlines = calls.filter((c: any[]) => c[0] === 'Track Your Fitness');
+    const calls: unknown[][] = ctx.fillText.mock.calls;
+    const headlines = calls.filter((c) => c[0] === 'Track Your Fitness');
     expect(headlines.length).toBe(0);
   });
 
   it('respects layer visibility — hides subheadline', () => {
     drawComposite(canvas, { ...baseState, layers: { background: true, device: true, headline: true, subheadline: false } });
-    const calls = ctx.fillText.mock.calls;
-    const subs = calls.filter((c: any[]) => c[0] === 'Reach Your Goals');
+    const calls: unknown[][] = ctx.fillText.mock.calls;
+    const subs = calls.filter((c) => c[0] === 'Reach Your Goals');
     expect(subs.length).toBe(0);
   });
 
@@ -322,9 +361,10 @@ describe('exportCanvasPNG', () => {
     const createObjectURLSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test');
     const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 
-    const canvas = {
-      toBlob: vi.fn((cb: (blob: Blob) => void) => cb(mockBlob))
-    } as unknown as HTMLCanvasElement;
+    const canvas = document.createElement('canvas');
+    canvas.toBlob = vi.fn((cb: BlobCallback) => {
+      cb(mockBlob);
+    });
 
     exportCanvasPNG(canvas, 'iphone-67');
     expect(canvas.toBlob).toHaveBeenCalled();

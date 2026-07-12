@@ -66,8 +66,12 @@ export default function IconsView() {
       });
 
       if (!res.ok) {
-        const err = await res.json() as { error?: string };
-        toast.error(err.error || 'Failed to resize icons');
+        const errJson: unknown = await res.json().catch(() => null);
+        const errMsg =
+          typeof errJson === 'object' && errJson !== null && 'error' in errJson && typeof errJson.error === 'string'
+            ? errJson.error
+            : 'Failed to resize icons';
+        toast.error(errMsg);
         setIsLoading(false);
         return;
       }

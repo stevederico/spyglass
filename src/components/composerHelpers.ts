@@ -164,7 +164,13 @@ export function buildFontString(fontWeight: string, fontSize: number, fontFamily
  * @param {string} fontFamily
  * @returns {{ fontSize: number, lines: string[] }}
  */
-export function fitTextToBox(ctx: CanvasRenderingContext2D, text: string, maxWidth: number, maxHeight: number, initialFontSize: number, fontWeight: string, fontFamily?: string): { fontSize: number; lines: string[] } {
+/** Minimal context surface required by {@link fitTextToBox}. */
+export type TextMeasureContext = {
+  font: string;
+  measureText: (text: string) => { width: number };
+};
+
+export function fitTextToBox(ctx: TextMeasureContext, text: string, maxWidth: number, maxHeight: number, initialFontSize: number, fontWeight: string, fontFamily?: string): { fontSize: number; lines: string[] } {
   const MIN_FONT_SIZE = 16;
   let fontSize = initialFontSize;
 

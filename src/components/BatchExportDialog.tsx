@@ -261,7 +261,7 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
         const deviceMatch = fileBase.match(/screenshot-\d+-(.+)\.png/);
         const device = deviceMatch ? deviceMatch[1] : 'unknown';
 
-        const blob = new Blob([bytes as BlobPart], { type: 'image/png' });
+        const blob = new Blob([bytes], { type: 'image/png' });
         formData.append(`file-${locale}-${device}`, blob, fileBase);
       }
 

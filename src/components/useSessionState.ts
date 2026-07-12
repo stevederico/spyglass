@@ -136,6 +136,26 @@ export interface UseSessionStateOptions {
 /** A setter accepting a value or an updater function, like useState's. */
 export type SessionStateSetter<T> = (newValueOrFn: T | ((prev: T) => T)) => void;
 
+/** Narrow a restored/unknown value to the caller's T (sessionStorage is untyped). */
+function isRestored<T>(value: unknown, _hint: T): value is T {
+  return true;
+}
+
+/** True when the setter argument is an updater function (not a function-typed state value). */
+function isUpdaterFn<T>(value: T | ((prev: T) => T)): value is (prev: T) => T {
+  return typeof value === 'function';
+}
+
+/** Read image src from a value that may be an HTMLImageElement. */
+function imageSrcOf(value: unknown): string | null {
+  if (value instanceof HTMLImageElement && value.src) return value.src;
+  if (typeof value === 'object' && value !== null && 'src' in value) {
+    const src = value.src;
+    return typeof src === 'string' && src.length > 0 ? src : null;
+  }
+  return null;
+}
+
 export function useSessionState<T>(key: string, defaultValue: T, options: UseSessionStateOptions = {}): [T, SessionStateSetter<T>] {
   const isImage = options.image || false;
   const initializedRef = useRef(false);
@@ -147,7 +167,7 @@ export function useSessionState<T>(key: string, defaultValue: T, options: UseSes
     }
     const stored = readStorage(key);
     if (stored === undefined) return defaultValue;
-    return stored as T;
+    return isRestored(stored, defaultValue) ? stored : defaultValue;
   });
 
   // Hydrate image state from IndexedDB on mount
@@ -158,24 +178,21 @@ export function useSessionState<T>(key: string, defaultValue: T, options: UseSes
     readImageDB(key).then((src) => {
       if (src && typeof src === 'string' && src.length > 0) {
         const img = new Image();
-        img.onload = () => setValueRaw(img as T);
+        img.onload = () => {
+          if (isRestored<T>(img, defaultValue)) setValueRaw(img);
+        };
         img.onerror = () => {};
         img.src = src;
       }
     }).catch(() => {});
-  }, [key, isImage]);
+  }, [key, isImage, defaultValue]);
 
   const setValue = useCallback<SessionStateSetter<T>>((newValueOrFn) => {
     setValueRaw((prev) => {
-      const next = typeof newValueOrFn === 'function' ? (newValueOrFn as (prev: T) => T)(prev) : newValueOrFn;
+      const next = isUpdaterFn(newValueOrFn) ? newValueOrFn(prev) : newValueOrFn;
 
       if (isImage) {
-        const img = next as { src?: string } | null;
-        if (img && img.src) {
-          writeImageDB(key, img.src);
-        } else {
-          writeImageDB(key, null);
-        }
+        writeImageDB(key, imageSrcOf(next));
       } else {
         writeStorage(key, next);
       }

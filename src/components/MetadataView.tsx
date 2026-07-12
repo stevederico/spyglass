@@ -45,6 +45,17 @@ interface Metadata {
 /** Map of locale code to its metadata fields. */
 type MetadataMap = Record<string, Metadata>;
 
+/** ASC localization row nested under appInfo.localizations. */
+interface AscLocalization {
+  id: string;
+  attributes?: Partial<Metadata> & { locale?: string };
+}
+
+/** ASC appInfo entry returned by GET /asc/apps/:id/metadata. */
+interface AscAppInfo {
+  localizations?: AscLocalization[];
+}
+
 /** AI-generatable metadata fields. */
 type GeneratableField = 'description' | 'keywords' | 'whatsNew';
 
@@ -221,7 +232,7 @@ export default function MetadataView() {
     if (!appId || appId.startsWith('local-')) return;
     setIsLoadingMeta(true);
     try {
-      const result = await apiRequest<{ data?: any[] }>(`/asc/apps/${appId}/metadata`);
+      const result = await apiRequest<{ data?: AscAppInfo[] }>(`/asc/apps/${appId}/metadata`);
       if (result?.data) {
         const metaMap: MetadataMap = {};
         const origMap: MetadataMap = {};

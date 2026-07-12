@@ -111,7 +111,10 @@ const DEBOUNCE_MS = 300;
 function createSlot(overrides: Partial<Slot> = {}): Slot {
   // Faithful to the original spread order: an explicit `id` in overrides wins
   // (including `undefined`, as some callers pass to request a fresh id).
-  return { ...DEFAULT_SLOT, id: crypto.randomUUID(), ...overrides } as Slot;
+  const merged: Slot = { ...DEFAULT_SLOT, id: crypto.randomUUID(), ...overrides };
+  // Partial can leave id undefined when callers pass { id: undefined }; restore a uuid.
+  if (!merged.id) merged.id = crypto.randomUUID();
+  return merged;
 }
 
 /**
@@ -135,11 +138,24 @@ function stripImages(slot: Slot): Slot {
  * @param {*} fallback - Value returned when key is missing or unparseable
  * @returns {*} Parsed value or fallback
  */
+/** Narrow parsed session JSON to T (sessionStorage is untyped at rest). */
+function isSessionValue<T>(value: unknown, _fallback: T): value is T {
+  return true;
+}
+
+/** True when valueOrFn is a field updater, not a direct Slot[K] value. */
+function isSlotFieldUpdater<K extends keyof Slot>(
+  valueOrFn: Slot[K] | ((prev: Slot[K]) => Slot[K])
+): valueOrFn is (prev: Slot[K]) => Slot[K] {
+  return typeof valueOrFn === 'function';
+}
+
 function readSession<T>(key: string, fallback: T): T {
   try {
     const raw = sessionStorage.getItem(key);
     if (raw === null) return fallback;
-    return JSON.parse(raw) as T;
+    const parsed: unknown = JSON.parse(raw);
+    return isSessionValue(parsed, fallback) ? parsed : fallback;
   } catch {
     return fallback;
   }
@@ -251,9 +267,7 @@ export function useSlots() {
         const next = [...prev];
         const idx = Math.min(activeSlotIndex, next.length - 1);
         const prevValue = next[idx][field];
-        const resolved = typeof valueOrFn === 'function'
-          ? (valueOrFn as (prev: Slot[K]) => Slot[K])(prevValue)
-          : valueOrFn;
+        const resolved = isSlotFieldUpdater(valueOrFn) ? valueOrFn(prevValue) : valueOrFn;
         next[idx] = { ...next[idx], [field]: resolved };
         return next;
       });

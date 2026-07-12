@@ -845,7 +845,7 @@ export default function ScreenshotsView() {
       setFrameImage(null);
       return;
     }
-    loadFrame(frameModel, frameColor, orientation as 'portrait' | 'landscape')
+    loadFrame(frameModel, frameColor, orientation === 'landscape' ? 'landscape' : 'portrait')
       .then(setFrameImage)
       .catch(() => {
         toast.error('Failed to load device frame');
@@ -1452,7 +1452,7 @@ export default function ScreenshotsView() {
                   { key: 'subheadline', label: 'Subheadline' },
                   { key: 'device', label: 'Device' },
                   { key: 'background', label: 'Background' },
-                ] as { key: keyof LayerVisibility; label: string }[]).map((layer) => (
+                ] satisfies { key: keyof LayerVisibility; label: string }[]).map((layer) => (
                   <button
                     key={layer.key}
                     onClick={() => toggleLayer(layer.key)}

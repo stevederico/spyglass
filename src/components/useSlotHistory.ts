@@ -23,7 +23,7 @@ export type HistoryState = Partial<Slot>;
 function extractHistoryState(slot: Slot): HistoryState {
   const state: HistoryState = {};
   for (const key of HISTORY_FIELDS) {
-    (state as Record<string, unknown>)[key] = slot[key];
+    state[key] = slot[key];
   }
   return state;
 }

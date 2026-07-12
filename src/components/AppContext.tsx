@@ -40,13 +40,22 @@ const AppContext = createContext<AppContextValue | null>(null);
  *
  * @returns {Object|null} Stored app object with id and name, or null
  */
+/** Narrow localStorage JSON into an AppEntry when id + name are present. */
+function parseAppEntry(raw: unknown): AppEntry | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  if (!('id' in raw) || typeof raw.id !== 'string') return null;
+  const name = 'name' in raw && typeof raw.name === 'string' ? raw.name : undefined;
+  if (!name || name === raw.id) return null;
+  return { id: raw.id, name };
+}
+
 function restoreSelectedApp(): AppEntry | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as AppEntry;
+    const parsed = parseAppEntry(JSON.parse(raw));
     // Clear entries where name is missing or is a raw ID
-    if (!parsed?.id || !parsed?.name || parsed.name === parsed.id) {
+    if (!parsed) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
