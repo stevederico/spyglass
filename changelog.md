@@ -3,6 +3,14 @@
 ## To-Do
 - CLI tool (browserless usage)
 
+0.13.0
+
+  Add dottie analytics dual-fire (Umami parallel, env-loaded id)
+  loadDottie: inject api.dottie.ai/script.js from VITE_DOTTIE_SRC/VITE_DOTTIE_ID (OSS — never hardcode write_key)
+  analytics.ts: dual-fire window.dottie alongside window.umami for track/identify/pageview
+  Dockerfile: ARG/ENV for VITE_DOTTIE_SRC/VITE_DOTTIE_ID build-time inline
+  CSP: allow aob.bixbyapps.com + api.dottie.ai in scriptSrc/connectSrc
+
 0.12.0
 
   Upgrade to skateboard 3.4.0 boilerplate

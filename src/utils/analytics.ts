@@ -1,18 +1,19 @@
 /**
- * Umami analytics tracking utilities
- * Safely handles umami not being loaded and sanitizes data
- * All tracking is disabled on localhost via isLocal() guard
+ * Analytics tracking utilities — dual-fires Umami + dottie in parallel.
+ * Safely handles either tracker not being loaded and sanitizes data.
+ * All tracking is disabled on localhost via isLocal() guard.
  */
 
-/** Minimal Umami browser API surface used by this app. */
-interface Umami {
+/** Minimal tracker browser API surface used by this app (Umami & dottie share it). */
+interface Tracker {
   track: (eventName?: string, data?: Record<string, unknown>) => void;
   identify: (userIdOrData: string | Record<string, unknown>, data?: Record<string, unknown>) => void;
 }
 
 declare global {
   interface Window {
-    umami?: Umami;
+    umami?: Tracker;
+    dottie?: Tracker;
   }
 }
 
@@ -63,14 +64,13 @@ const sanitizeEventData = (data: unknown): Record<string, unknown> => {
  * @param {Object} data - Optional event data
  */
 export const trackEvent = (eventName: string, data: Record<string, unknown> = {}) => {
-  if (isLocal()) return;
-  if (typeof window !== 'undefined' && window.umami) {
-    try {
-      const sanitizedData = sanitizeEventData(data);
-      window.umami.track(eventName, sanitizedData);
-    } catch (error) {
-      console.warn('Analytics tracking failed:', error);
-    }
+  if (isLocal() || typeof window === 'undefined') return;
+  try {
+    const sanitizedData = sanitizeEventData(data);
+    window.umami?.track?.(eventName, sanitizedData);
+    window.dottie?.track?.(eventName, sanitizedData);
+  } catch (error) {
+    console.warn('Analytics tracking failed:', error);
   }
 };
 
@@ -81,17 +81,17 @@ export const trackEvent = (eventName: string, data: Record<string, unknown> = {}
  * @param {Object} data - Optional user metadata
  */
 export const identifyUser = (userId: string, data: Record<string, unknown> = {}) => {
-  if (isLocal()) return;
-  if (typeof window !== 'undefined' && window.umami) {
-    try {
-      if (userId) {
-        window.umami.identify(userId, data);
-      } else {
-        window.umami.identify(data);
-      }
-    } catch (error) {
-      console.warn('User identification failed:', error);
+  if (isLocal() || typeof window === 'undefined') return;
+  try {
+    if (userId) {
+      window.umami?.identify?.(userId, data);
+      window.dottie?.identify?.(userId, data);
+    } else {
+      window.umami?.identify?.(data);
+      window.dottie?.identify?.(data);
     }
+  } catch (error) {
+    console.warn('User identification failed:', error);
   }
 };
 
@@ -99,12 +99,11 @@ export const identifyUser = (userId: string, data: Record<string, unknown> = {})
  * Track a page view
  */
 export const trackPageView = () => {
-  if (isLocal()) return;
-  if (typeof window !== 'undefined' && window.umami) {
-    try {
-      window.umami.track();
-    } catch (error) {
-      console.warn('Page view tracking failed:', error);
-    }
+  if (isLocal() || typeof window === 'undefined') return;
+  try {
+    window.umami?.track?.();
+    window.dottie?.track?.();
+  } catch (error) {
+    console.warn('Page view tracking failed:', error);
   }
 };
