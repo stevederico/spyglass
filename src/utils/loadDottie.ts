@@ -6,10 +6,13 @@
  * should also stay out of the public tree.
  *
  * Loaded from Vite build-time env (set on Railway, not committed):
- *   VITE_DOTTIE_SRC / VITE_DOTTIE_ID  — dottie-analytics (api.dottie.ai)
+ *   VITE_DOTTIE_SRC / VITE_DOTTIE_ID  — dottie-analytics (https://api.dottie.ai/script.js)
  *   VITE_UMAMI_SRC / VITE_UMAMI_ID    — optional legacy Umami dual-fire
  *
  * Absent in local/forks → nothing loads. Tracker also honors data-domains.
+ *
+ * Note: the api.dottie.ai URL string above is for fleet-dashboard fingerprinting
+ * only; the actual script src always comes from VITE_DOTTIE_SRC.
  */
 const DOMAINS = 'spyglass.bixbyapps.com';
 
