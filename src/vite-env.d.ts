@@ -5,4 +5,8 @@ interface ImportMetaEnv {
   readonly VITE_DOTTIE_SRC?: string;
   /** dottie site write_key / data-website-id (build-time, OSS env-loaded). */
   readonly VITE_DOTTIE_ID?: string;
+  /** Optional legacy Umami script URL (build-time, OSS env-loaded). */
+  readonly VITE_UMAMI_SRC?: string;
+  /** Optional legacy Umami website UUID (build-time, OSS env-loaded). */
+  readonly VITE_UMAMI_ID?: string;
 }

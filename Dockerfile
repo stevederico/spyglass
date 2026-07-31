@@ -11,12 +11,16 @@ RUN npm install && cd backend && npm install
 
 COPY . .
 
-# dottie analytics tracker (OSS: env-loaded, never hardcoded). Vite inlines
-# these at build time; Railway supplies them as build args.
+# Analytics trackers (OSS: env-loaded, never hardcoded). Vite inlines these
+# at build time; Railway supplies them as build args / service variables.
 ARG VITE_DOTTIE_SRC
 ARG VITE_DOTTIE_ID
+ARG VITE_UMAMI_SRC
+ARG VITE_UMAMI_ID
 ENV VITE_DOTTIE_SRC=$VITE_DOTTIE_SRC
 ENV VITE_DOTTIE_ID=$VITE_DOTTIE_ID
+ENV VITE_UMAMI_SRC=$VITE_UMAMI_SRC
+ENV VITE_UMAMI_ID=$VITE_UMAMI_ID
 
 RUN npm run build
 

@@ -1429,6 +1429,8 @@ app.post("/api/checkout", authMiddleware, csrfProtection, async (c) => {
     // Use FRONTEND_URL env var or origin header, fallback to localhost for dev
     const origin = process.env.FRONTEND_URL || c.req.header('origin') || `http://localhost:${port}`;
 
+    // APP_NAME stamps metadata for stripe-proxy routing (no secrets)
+    const appName = (process.env.APP_NAME || process.env.RAILWAY_SERVICE_NAME || 'spyglass').trim().toLowerCase();
     const session = await s.checkout.sessions.create({
       customer_email: email,
       mode: "subscription",
@@ -1436,7 +1438,8 @@ app.post("/api/checkout", authMiddleware, csrfProtection, async (c) => {
       billing_address_collection: "auto",
       success_url: `${origin}/app/payment?success=true`,
       cancel_url: `${origin}/app/payment?canceled=true`,
-      subscription_data: { metadata: { email } },
+      metadata: { app: appName },
+      subscription_data: { metadata: { email, app: appName } },
     });
     return c.json({ url: session.url, id: session.id, customerID: session.customer });
   } catch (e) {
