@@ -9,12 +9,14 @@
     "scripts": {
         "start": "node server.ts",
         "dev": "node --watch server.ts",
-        "test": "node --experimental-test-module-mocks --experimental-test-coverage --test-concurrency=1 --test server.test.ts server.lifecycle.test.js server.prod-import.test.js adapters/*.test.js lib/*.test.js",
+        "test": "node --experimental-test-module-mocks --experimental-test-coverage --test-concurrency=1 --test server.test.ts ascSafety.test.ts server.lifecycle.test.js server.prod-import.test.js adapters/*.test.js lib/*.test.js",
         "test:watch": "node --test --watch server.test.ts"
     },
     "dependencies": {
         "@hono/node-server": "^1.14.1",
+        "archiver": "7",
         "hono": "^4.7.11",
+        "sharp": "0.35.3",
         "stripe": "^18.5.0"
     },
     "devDependencies": {

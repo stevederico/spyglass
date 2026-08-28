@@ -9,6 +9,15 @@ import { cors } from 'hono/cors'
 import Stripe from "stripe";
 import crypto from "crypto";
 
+import ascApp from './asc.js';
+import translateApp from './translate.js';
+import aiApp from './ai.js';
+import templatesApp from './templates.js';
+import metadataHistoryApp from './metadataHistory.js';
+import exportsApp from './exports.js';
+import iconsApp from './icons.js';
+import precheckApp from './precheck.js';
+import keywordsApp from './keywords.js';
 import { databaseManager } from "./adapters/manager.ts";
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -1477,6 +1486,36 @@ app.post("/api/portal", authMiddleware, csrfProtection, async (c) => {
     return c.json({ error: "Stripe portal failed" }, 500);
   }
 });
+
+// ==== FEATURE SUB-APPS ====
+// These were dropped by the "Sync skateboard boilerplate to 3.6.1" commit
+// (f1254e0), which overwrote backend/server.js wholesale -- every ASC feature
+// has 404'd since. Restored here.
+//
+// The sub-apps define no auth of their own (keywords.js reads
+// c.get('userID') || 'anonymous', the fossil of an intent never wired up), and
+// they reach simctl, the filesystem and paid AI APIs. They are gated at the
+// mount rather than route by route so a new route in any of them is protected
+// by default.
+app.use('/api/asc/*', authMiddleware);
+app.use('/api/ai/*', authMiddleware);
+app.use('/api/templates/*', authMiddleware);
+app.use('/api/metadata-history/*', authMiddleware);
+app.use('/api/exports/*', authMiddleware);
+app.use('/api/icons/*', authMiddleware);
+app.use('/api/precheck/*', authMiddleware);
+app.use('/api/keywords/*', authMiddleware);
+app.use('/api/translate/*', authMiddleware);
+
+app.route('/api', ascApp);
+app.route('/api', translateApp);
+app.route('/api', aiApp);
+app.route('/api', templatesApp);
+app.route('/api', metadataHistoryApp);
+app.route('/api', exportsApp);
+app.route('/api', iconsApp);
+app.route('/api', precheckApp);
+app.route('/api', keywordsApp);
 
 // ==== STATIC FILE SERVING (Production) ====
 const staticDir = resolve(__dirname, config.staticDir);

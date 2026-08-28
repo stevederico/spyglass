@@ -5,13 +5,44 @@
 import { Hono } from 'hono';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
-import { exec } from 'node:child_process';
+import { exec, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import crypto from 'node:crypto';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const execAsync = promisify(exec);
+/** Argv-array exec: no shell, so nothing interpolated can be injected. */
+const execFileAsync = promisify(execFile);
+
+/** App Store bundle identifiers: reverse-DNS, letters/digits/hyphen/dot only. */
+const BUNDLE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9.-]{0,254}$/;
+
+/** ASC key ids are short alphanumerics; anything else would escape keysDir. */
+const KEY_ID_RE = /^[A-Za-z0-9]{1,64}$/;
+
+/** Simulator UDIDs as reported by simctl. */
+const UDID_RE = /^[A-F0-9-]{8,64}$/i;
+
+/**
+ * Reject a filename component that could escape its directory.
+ *
+ * Step names land in `${name}_${simulator}.png` under the output directory, so
+ * a separator or `..` writes outside it.
+ *
+ * @param {unknown} value - Candidate name from the request body
+ * @returns {boolean} Whether it is safe to use in a path
+ */
+function isSafePathSegment(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= 128
+    && !value.includes('/')
+    && !value.includes('\\')
+    && !value.includes('\0')
+    && value !== '.'
+    && value !== '..';
+}
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -489,8 +520,8 @@ async function cropStatusBar(screenshotPath, simulatorName) {
   const barHeight = STATUS_BAR_HEIGHTS[simulatorName] ?? DEFAULT_STATUS_BAR_HEIGHT;
 
   // Read image dimensions via sips
-  const { stdout: dimOutput } = await execAsync(
-    `sips -g pixelHeight -g pixelWidth "${screenshotPath}"`,
+  const { stdout: dimOutput } = await execFileAsync(
+    'sips', ['-g', 'pixelHeight', '-g', 'pixelWidth', screenshotPath],
     { timeout: 30000 }
   );
 
@@ -507,8 +538,9 @@ async function cropStatusBar(screenshotPath, simulatorName) {
 
   if (croppedHeight <= 0) return;
 
-  await execAsync(
-    `sips --cropOffset ${barHeight} 0 --resampleHeightWidth ${croppedHeight} ${imgWidth} "${screenshotPath}"`,
+  await execFileAsync(
+    'sips',
+    ['--cropOffset', String(barHeight), '0', '--resampleHeightWidth', String(croppedHeight), String(imgWidth), screenshotPath],
     { timeout: 30000 }
   );
 }
@@ -553,6 +585,22 @@ app.post('/asc/screenshots/capture', async (c) => {
       return c.json({ error: 'bundleId and simulators array are required' }, 400);
     }
 
+    // bundleId reaches simctl and becomes a directory name, so it is checked
+    // rather than merely quoted -- quoting was what made this injectable.
+    if (!BUNDLE_ID_RE.test(bundleId)) {
+      return c.json({ error: 'Invalid bundleId' }, 400);
+    }
+    if (name !== undefined && name !== null && !isSafePathSegment(name)) {
+      return c.json({ error: 'Invalid name' }, 400);
+    }
+    if (Array.isArray(steps)) {
+      for (const step of steps) {
+        if (step?.name !== undefined && !isSafePathSegment(step.name)) {
+          return c.json({ error: 'Invalid step name' }, 400);
+        }
+      }
+    }
+
     const screenshotsDir = path.resolve(__dirname, 'screenshots');
     const results = [];
 
@@ -588,7 +636,10 @@ app.post('/asc/screenshots/capture', async (c) => {
 
         // Boot the simulator (ignore error if already booted)
         try {
-          await execAsync(`xcrun simctl boot ${deviceUDID}`, { timeout: 30000 });
+          if (!UDID_RE.test(String(deviceUDID))) {
+            throw new Error('Unexpected simulator UDID');
+          }
+          await execFileAsync('xcrun', ['simctl', 'boot', deviceUDID], { timeout: 30000 });
         } catch (bootErr) {
           if (bootErr.stderr && !bootErr.stderr.includes('Unable to boot device in current state')) {
             results.push({ simulator, error: `Failed to boot simulator: ${bootErr.message}` });
@@ -601,7 +652,7 @@ app.post('/asc/screenshots/capture', async (c) => {
 
         // Launch the app (install happens automatically if app is on simulator)
         try {
-          await execAsync(`xcrun simctl launch ${deviceUDID} ${bundleId}`);
+          await execFileAsync('xcrun', ['simctl', 'launch', deviceUDID, bundleId], { timeout: 30000 });
         } catch (launchErr) {
           results.push({ simulator, error: `Failed to launch ${bundleId}: ${launchErr.message}` });
           continue;
@@ -628,7 +679,7 @@ app.post('/asc/screenshots/capture', async (c) => {
 
             const stepFileName = `${step.name ?? `step_${Date.now()}`}_${sanitizedName}.png`;
             const screenshotPath = path.join(outDir, stepFileName);
-            await execAsync(`xcrun simctl io ${deviceUDID} screenshot "${screenshotPath}"`, { timeout: 30000 });
+            await execFileAsync('xcrun', ['simctl', 'io', deviceUDID, 'screenshot', screenshotPath], { timeout: 30000 });
 
             if (shouldCrop) {
               await cropStatusBar(screenshotPath, simulator);
@@ -644,7 +695,7 @@ app.post('/asc/screenshots/capture', async (c) => {
             ? `${name}_${sanitizedName}.png`
             : `screenshot_${Date.now()}.png`;
           const screenshotPath = path.join(outDir, fileName);
-          await execAsync(`xcrun simctl io ${deviceUDID} screenshot "${screenshotPath}"`, { timeout: 30000 });
+          await execFileAsync('xcrun', ['simctl', 'io', deviceUDID, 'screenshot', screenshotPath], { timeout: 30000 });
 
           if (shouldCrop) {
             await cropStatusBar(screenshotPath, simulator);
@@ -684,6 +735,12 @@ app.post('/asc/credentials', async (c) => {
 
     if (!keyId || !issuerId || !privateKey) {
       return c.json({ error: 'keyId, issuerId, and privateKey are required' }, 400);
+    }
+
+    // keyId builds a file path AND is written into .env below, so a separator
+    // escapes keysDir and a newline injects environment variables.
+    if (!KEY_ID_RE.test(keyId)) {
+      return c.json({ error: 'Invalid keyId' }, 400);
     }
 
     // Write private key to a file
