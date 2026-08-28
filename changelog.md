@@ -3,6 +3,14 @@
 ## To-Do
 - CLI tool (browserless usage)
 
+0.14.0
+
+  Remount the feature sub-apps
+  Gate the sub-apps behind auth
+  Use execFile for simctl and sips
+  Validate bundleId keyId and step names
+  Declare sharp and archiver
+
 0.13.0
 
   Add dottie analytics dual-fire (Umami parallel, env-loaded id)
