@@ -16,14 +16,14 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ChangeEvent } from 'react';
-import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
+import { apiRequest, getCSRFToken } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
 import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
 import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@stevederico/skateboard-ui/shadcn/ui/select';
 import { toast } from 'sonner';
-import { ChevronDown } from '@stevederico/skateboard-ui/icons';
+import { ChevronDown } from 'lucide-react';
 import { STARTER_TEMPLATES } from './composerHelpers';
 import type { ComposerState } from './composerHelpers';
 
@@ -205,10 +205,12 @@ export default function TemplatePanel({ currentState, onLoadTemplate, appId, sel
     formData.append('file', file);
 
     try {
+      const csrf = getCSRFToken();
       await fetch('/api/templates/fonts', {
         method: 'POST',
         body: formData,
-        credentials: 'include'
+        credentials: 'include',
+        headers: csrf ? { 'X-CSRF-Token': csrf } : {}
       });
       toast.success('Font uploaded');
       await fetchFonts();

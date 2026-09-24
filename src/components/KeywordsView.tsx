@@ -10,7 +10,7 @@
 import Header from '@stevederico/skateboard-ui/Header';
 import UpgradeSheet from '@stevederico/skateboard-ui/UpgradeSheet';
 import type { UpgradeSheetHandle } from '@stevederico/skateboard-ui/UpgradeSheet';
-import DynamicIcon from '@stevederico/skateboard-ui/DynamicIcon';
+import { Search } from 'lucide-react';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
 import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
 import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
@@ -79,7 +79,7 @@ export default function KeywordsView() {
               disabled={isLoading}
               aria-label="Search"
             >
-              <DynamicIcon name="search" size={18} />
+              <Search size={18} aria-hidden="true" />
             </Button>
           </div>
         </div>
@@ -87,7 +87,7 @@ export default function KeywordsView() {
         <div className="flex-1 overflow-y-auto p-6">
           {results.length === 0 ? (
             <div className="text-center py-12 opacity-60">
-              <DynamicIcon name="search" size={32} className="mx-auto mb-4 opacity-50" />
+              <Search size={32} className="mx-auto mb-4 opacity-50" aria-hidden="true" />
               <p>Search for App Store keywords to see rankings</p>
             </div>
           ) : (

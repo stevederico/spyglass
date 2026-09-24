@@ -16,7 +16,7 @@
  * @returns {JSX.Element} Batch export sheet
  */
 import { useState, useCallback } from 'react';
-import { getBackendURL } from '@stevederico/skateboard-ui/Utilities';
+import { getBackendURL, getCSRFToken } from '@stevederico/skateboard-ui/Utilities';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@stevederico/skateboard-ui/shadcn/ui/sheet';
 import { Checkbox } from '@stevederico/skateboard-ui/shadcn/ui/checkbox';
@@ -265,10 +265,12 @@ export default function BatchExportDialog({ open, onOpenChange, baseState, trans
         formData.append(`file-${locale}-${device}`, blob, fileBase);
       }
 
+      const csrf = getCSRFToken();
       const response = await fetch(`${getBackendURL()}/exports`, {
         method: 'POST',
         body: formData,
-        credentials: 'include'
+        credentials: 'include',
+        headers: csrf ? { 'X-CSRF-Token': csrf } : {}
       });
 
       if (!response.ok) {

@@ -576,8 +576,8 @@ export default function MetadataView() {
     if (!selectedApp?.id) return;
     setIsLoadingHistory(true);
     try {
-      const result = await apiRequest<{ data?: HistorySnapshot[] }>(`/metadata-history/${selectedApp.id}`);
-      setHistorySnapshots(result?.data || []);
+      const result = await apiRequest<HistorySnapshot[] | { data?: HistorySnapshot[] }>(`/metadata-history/${selectedApp.id}`);
+      setHistorySnapshots(Array.isArray(result) ? result : (result?.data ?? []));
     } catch {
       toast.error('Failed to load version history');
     } finally {
@@ -592,12 +592,13 @@ export default function MetadataView() {
    */
   async function handleRestoreSnapshot(snapshotId: string) {
     try {
-      const result = await apiRequest<{ data?: { metadata: string | Partial<Metadata>; locale?: string } }>(`/metadata-history/snapshot/${snapshotId}`);
-      if (result?.data) {
-        const restored = typeof result.data.metadata === 'string'
-          ? JSON.parse(result.data.metadata)
-          : result.data.metadata;
-        const locale = result.data.locale || selectedLocale;
+      const result = await apiRequest<{ metadata?: string | Partial<Metadata>; locale?: string; data?: { metadata?: string | Partial<Metadata>; locale?: string } }>(`/metadata-history/snapshot/${snapshotId}`);
+      const row = result?.metadata !== undefined ? result : result?.data;
+      if (row?.metadata !== undefined) {
+        const restored = typeof row.metadata === 'string'
+          ? JSON.parse(row.metadata)
+          : row.metadata;
+        const locale = row.locale || selectedLocale;
 
         setLocalizedMetadata((prev) => ({
           ...prev,

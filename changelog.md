@@ -3,6 +3,14 @@
 ## To-Do
 - CLI tool (browserless usage)
 
+0.15.0
+
+  Move backend to Rust
+  Port feature routes
+  Pin skateboard 5.6
+  Pin skateboard-ui 5.1
+  Scope deletes by user
+
 0.14.0
 
   Remount the feature sub-apps

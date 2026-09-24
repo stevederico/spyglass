@@ -10,7 +10,8 @@
 import Header from '@stevederico/skateboard-ui/Header';
 import UpgradeSheet from '@stevederico/skateboard-ui/UpgradeSheet';
 import type { UpgradeSheetHandle } from '@stevederico/skateboard-ui/UpgradeSheet';
-import DynamicIcon from '@stevederico/skateboard-ui/DynamicIcon';
+import { CircleAlert, CircleCheck, Info, TriangleAlert } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
 import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
 import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
@@ -42,18 +43,35 @@ const SEVERITY_COLORS: Record<string, string> = {
 };
 
 /** Severity icon mapping by rule ID */
-const SEVERITY_ICONS: Record<string, string> = {
-  negative_apple: 'alert-circle',
-  competitor_mention: 'alert-circle',
-  curse_words: 'alert-circle',
-  future_functionality: 'alert-triangle',
-  test_words: 'alert-triangle',
-  placeholder_text: 'alert-triangle',
-  free_iap: 'alert-circle',
-  copyright_year: 'info',
-  unreachable_url: 'info',
-  price_mention: 'info'
+const SEVERITY_ICONS: Record<string, LucideIcon> = {
+  negative_apple: CircleAlert,
+  competitor_mention: CircleAlert,
+  curse_words: CircleAlert,
+  future_functionality: TriangleAlert,
+  test_words: TriangleAlert,
+  placeholder_text: TriangleAlert,
+  free_iap: CircleAlert,
+  copyright_year: Info,
+  unreachable_url: Info,
+  price_mention: Info,
 };
+
+/**
+ * Icon for a precheck warning, paired with its severity color.
+ *
+ * @param id - Rule id from the precheck response
+ * @returns The severity icon
+ */
+function SeverityIcon({ id }: { id: string }) {
+  const Icon = SEVERITY_ICONS[id] ?? TriangleAlert;
+  return (
+    <Icon
+      size={20}
+      className={`${SEVERITY_COLORS[id] || 'text-yellow-500'} shrink-0 mt-0.5`}
+      aria-hidden="true"
+    />
+  );
+}
 
 export default function PrecheckView() {
   const { state } = getState();
@@ -167,7 +185,7 @@ export default function PrecheckView() {
             <div className="mt-2 flex flex-col gap-3">
               {warnings.length === 0 ? (
                 <div className="flex items-center gap-3 bg-green-500/10 border border-green-500/20 rounded-lg p-4">
-                  <DynamicIcon name="check-circle" size={20} className="text-green-500 shrink-0" />
+                  <CircleCheck size={20} className="text-green-500 shrink-0" aria-hidden="true" />
                   <div>
                     <p className="font-medium text-green-500">All Clear</p>
                     <p className="text-sm opacity-60">No rejection triggers found in your metadata.</p>
@@ -178,11 +196,7 @@ export default function PrecheckView() {
                   <p className="font-medium opacity-70">{warnings.length} warning{warnings.length > 1 ? 's' : ''} found</p>
                   {warnings.map((w, i) => (
                     <div key={i} className="flex items-start gap-3 bg-accent rounded-lg p-4">
-                      <DynamicIcon
-                        name={SEVERITY_ICONS[w.id] || 'alert-triangle'}
-                        size={20}
-                        className={`${SEVERITY_COLORS[w.id] || 'text-yellow-500'} shrink-0 mt-0.5`}
-                      />
+                      <SeverityIcon id={w.id} />
                       <div>
                         <p className={`font-medium ${SEVERITY_COLORS[w.id] || 'text-yellow-500'}`}>{w.name}</p>
                         <p className="text-sm opacity-60 mt-1">{w.message}</p>

@@ -28,7 +28,7 @@ import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
 import { Spinner } from '@stevederico/skateboard-ui/shadcn/ui/spinner';
 import { toast } from 'sonner';
-import { Eye, EyeOff, ChevronDown } from '@stevederico/skateboard-ui/icons';
+import { Eye, EyeOff, ChevronDown } from 'lucide-react';
 import { DEVICES, FONT_WEIGHTS, drawComposite, exportCanvasPNG, renderForLocale, getDeviceFamily, detectFamilyFromImage, getDefaultDeviceForFamily } from './composerHelpers';
 import type { LayerVisibility, ComposerState } from './composerHelpers';
 import type { SlotTranslation } from './useSlots';
