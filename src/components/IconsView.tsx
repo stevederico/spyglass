@@ -10,11 +10,11 @@
 import Header from '@stevederico/skateboard-ui/Header';
 import UpgradeSheet from '@stevederico/skateboard-ui/UpgradeSheet';
 import type { UpgradeSheetHandle } from '@stevederico/skateboard-ui/UpgradeSheet';
-import DynamicIcon from '@stevederico/skateboard-ui/DynamicIcon';
+import { Upload } from 'lucide-react';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
 import { useState, useRef } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
-import { getRemainingUsage, trackUsage, showUpgradeSheet } from '@stevederico/skateboard-ui/Utilities';
+import { getRemainingUsage, trackUsage, showUpgradeSheet, getCSRFToken } from '@stevederico/skateboard-ui/Utilities';
 import { getState } from '@stevederico/skateboard-ui/Context';
 import { toast } from 'sonner';
 
@@ -59,9 +59,11 @@ export default function IconsView() {
       const formData = new FormData();
       formData.append('file', file);
 
+      const csrf = getCSRFToken();
       const res = await fetch('/api/icons/resize', {
         method: 'POST',
         credentials: 'include',
+        headers: csrf ? { 'X-CSRF-Token': csrf } : {},
         body: formData
       });
 
@@ -111,7 +113,7 @@ export default function IconsView() {
               <img src={preview} alt="Icon preview" className="size-32 mx-auto rounded-lg" />
             ) : (
               <div className="flex flex-col items-center gap-2">
-                <DynamicIcon name="upload" size={32} className="opacity-50" />
+                <Upload size={32} className="opacity-50" aria-hidden="true" />
                 <p className="opacity-60">Drop a 1024x1024 PNG here or click to upload</p>
               </div>
             )}

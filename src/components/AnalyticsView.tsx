@@ -11,7 +11,7 @@
 import Header from '@stevederico/skateboard-ui/Header';
 import UpgradeSheet from '@stevederico/skateboard-ui/UpgradeSheet';
 import type { UpgradeSheetHandle } from '@stevederico/skateboard-ui/UpgradeSheet';
-import DynamicIcon from '@stevederico/skateboard-ui/DynamicIcon';
+import { KeyRound, Loader, Smartphone } from 'lucide-react';
 import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
 import { Card, CardContent } from '@stevederico/skateboard-ui/shadcn/ui/card';
 import { useState, useRef, useEffect } from "react";
@@ -91,7 +91,7 @@ export default function AnalyticsView() {
         <div className="flex flex-col h-screen bg-background">
           <div className="flex-1 flex items-center justify-center p-6">
             <div className="text-center flex flex-col items-center gap-4">
-              <DynamicIcon name="key-round" size={48} className="opacity-30" />
+              <KeyRound size={48} className="opacity-30" aria-hidden="true" />
               <div>
                 <p className="font-medium mb-1">No App Store Connect credentials</p>
                 <p className="text-sm opacity-60">Configure your ASC API key in Settings to use Analytics.</p>
@@ -115,7 +115,7 @@ export default function AnalyticsView() {
               <p className="font-medium opacity-70">Select an App</p>
               {apps.length === 0 ? (
                 <div className="text-center py-12 opacity-60">
-                  <DynamicIcon name="loader" size={24} className="mx-auto mb-4 animate-spin" />
+                  <Loader size={24} className="mx-auto mb-4 animate-spin" aria-hidden="true" />
                   <p>Loading apps...</p>
                 </div>
               ) : (
@@ -126,7 +126,7 @@ export default function AnalyticsView() {
                     className="w-full flex items-center gap-4 p-4 bg-accent rounded-lg hover:opacity-80 transition-opacity text-left"
                     aria-label={`View analytics for ${app.name}`}
                   >
-                    <DynamicIcon name="smartphone" size={20} className="opacity-50" />
+                    <Smartphone size={20} className="opacity-50" aria-hidden="true" />
                     <div>
                       <p className="font-medium">{app.name}</p>
                       <p className="text-sm opacity-60">{app.bundleId}</p>
@@ -154,7 +154,7 @@ export default function AnalyticsView() {
 
               {isLoading ? (
                 <div className="text-center py-8">
-                  <DynamicIcon name="loader" size={24} className="mx-auto animate-spin opacity-60" />
+                  <Loader size={24} className="mx-auto animate-spin opacity-60" aria-hidden="true" />
                 </div>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

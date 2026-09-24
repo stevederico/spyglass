@@ -20,7 +20,7 @@ import type { KeyboardEvent } from 'react';
 import { drawComposite, DEVICES } from './composerHelpers';
 import { FRAME_MODELS } from './frameManifest';
 import type { Slot } from './useSlots';
-import { X, Plus, Copy } from '@stevederico/skateboard-ui/icons';
+import { X, Plus, Copy } from 'lucide-react';
 
 /** Props for a single thumbnail card in the filmstrip. */
 interface ThumbnailCardProps {

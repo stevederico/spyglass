@@ -18,7 +18,7 @@
 
 Spyglass is a web app for creating, translating, and managing App Store screenshots and metadata. Design marketing screenshots with real device frames and text overlays, translate them into 28 languages, batch export for every device and locale, and push everything to App Store Connect.
 
-Built on [Skateboard](https://github.com/stevederico/skateboard) with React 19, Hono, and Tailwind CSS v4.
+Built on [Skateboard](https://github.com/stevederico/skateboard) 5.6 with React 19, a zero-crate Rust backend, and Tailwind CSS v4.
 
 ## Features
 
@@ -235,14 +235,9 @@ spyglass/
 │   └── assets/styles.css          # Theme overrides
 ├── public/frames/                 # Device frame PNGs
 ├── backend/
-│   ├── server.js                  # Hono server
-│   ├── asc.js                     # App Store Connect API routes
-│   ├── translate.js               # Translation routes
-│   ├── exports.js                 # Export package routes
-│   ├── templates.js               # Template CRUD routes
-│   ├── metadataHistory.js         # Metadata version history
-│   ├── ai.js                      # AI metadata generation routes (xAI Grok)
-│   └── adapters/                  # Database adapters (SQLite, PostgreSQL, MongoDB)
+│   ├── src/                       # Zero-crate Rust server
+│   ├── Cargo.toml                 # Empty dependency list
+│   └── config.json                # SQLite path and static dir
 ├── cli/                           # CLI tool (WIP)
 └── package.json
 ```
@@ -250,8 +245,8 @@ spyglass/
 ## Testing
 
 ```bash
-npm run test           # Run all tests
-npm run test:watch     # Watch mode
+npm test                         # Frontend typecheck and script tests
+cd backend && cargo test --locked
 ```
 
 ## Deployment
@@ -272,17 +267,15 @@ All other features — screenshot composition, metadata editing, App Store Conne
 | Technology | Purpose |
 |---|---|
 | React 19 | UI framework |
-| Vite 7.1+ | Build tool |
+| Vite 8 | Build tool |
 | Tailwind CSS v4 | Styling |
 | shadcn/ui | Component library |
 | Canvas API | Screenshot rendering and composition |
-| Hono | Backend server |
+| Rust | Backend server |
 | SQLite | Database |
-| Vitest | Testing |
 | xAI Grok | AI metadata generation and background images |
-| fflate | Zip compression for batch exports |
 | App Store Connect API | Screenshot and metadata management |
-| LibreTranslate | Marketing text translation |
+| MyMemory | Marketing text translation |
 
 ## License
 
