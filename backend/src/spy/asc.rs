@@ -288,10 +288,10 @@ pub fn screenshots_delete(state: &AppState, req: &Request, user_id: &str) -> Res
     }
 }
 
-/// Available simulators. 501 when the host has no `xcrun`.
+/// Available simulators. A host without `xcrun` has none, so the list is empty.
 pub fn simulators(state: &AppState) -> Response {
     if !simulators_available() {
-        return err(501, "Simulator features are unavailable in this environment.");
+        return empty_simulators();
     }
     match run(state, "xcrun", &["simctl", "list", "devices", "available", "-j"], 30) {
         Ok(stdout) => match json::parse(stdout.as_bytes()) {
@@ -667,6 +667,10 @@ fn path_segment(value: &str) -> bool {
         && !value.contains('\0')
         && value != "."
         && value != ".."
+}
+
+fn empty_simulators() -> Response {
+    json_res(200, &obj(vec![("simulators", Json::Arr(Vec::new()))]))
 }
 
 fn simulators_available() -> bool {
@@ -1097,6 +1101,14 @@ fn es256_sign(pem: &str, message: &[u8]) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn missing_xcrun_lists_no_simulators() {
+        let res = empty_simulators();
+        assert_eq!(res.status, 200);
+        let body = String::from_utf8(res.body).unwrap();
+        assert!(body.contains("\"simulators\":[]"), "{body}");
+    }
 
     #[test]
     fn md5_of_empty_and_abc() {

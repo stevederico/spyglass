@@ -152,7 +152,7 @@ LIBRETRANSLATE_API_KEY=
 | GET | `/api/asc/apps/:id/screenshots` | Get screenshot sets |
 | POST | `/api/asc/apps/:id/screenshots` | Upload screenshot (3-step) |
 | DELETE | `/api/asc/screenshots/:id` | Delete screenshot |
-| GET | `/api/asc/simulators` | List available iOS simulators (macOS only) |
+| GET | `/api/asc/simulators` | List available iOS simulators. Empty list when the host has no Xcode. |
 | POST | `/api/asc/screenshots/capture` | Capture from iOS simulators (macOS only) |
 
 ### Translation

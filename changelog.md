@@ -3,6 +3,11 @@
 ## To-Do
 - CLI tool (browserless usage)
 
+0.16.0
+
+  Return empty simulator list
+  Keep capture manual off Mac
+
 0.15.0
 
   Move backend to Rust
