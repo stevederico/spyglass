@@ -1,3 +1,7 @@
+0.17.0
+
+  Drop dottie-analytics
+
 ## CHANGELOG
 
 ## To-Do
