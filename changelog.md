@@ -1,3 +1,7 @@
+0.18.0
+
+  Ship plan list
+
 0.17.0
 
   Drop dottie-analytics
