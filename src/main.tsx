@@ -24,14 +24,13 @@ import AnalyticsView from './components/AnalyticsView';
 import SettingsView from './components/SettingsView';
 import LandingView from './components/LandingView';
 import { AppProvider } from './components/AppContext';
-import AnalyticsProvider from './components/AnalyticsProvider';
 
 /**
- * Composed wrapper: analytics tracking wraps app-specific context.
- * @param props.children - App content rendered inside the providers
+ * Composed wrapper: app-specific context.
+ * @param props.children - App content rendered inside the provider
  */
 const AppWrapper = ({ children }: { children?: ReactNode }) => (
-  <AnalyticsProvider><AppProvider>{children}</AppProvider></AnalyticsProvider>
+  <AppProvider>{children}</AppProvider>
 );
 
 /**

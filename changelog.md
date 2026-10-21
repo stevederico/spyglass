@@ -1,3 +1,9 @@
+0.19.0
+
+  Remove the remaining analytics code
+  Drop Umami tracker utils, provider and event attributes
+  Drop VITE_DOTTIE_*/VITE_UMAMI_* build args
+
 0.18.0
 
   Ship plan list

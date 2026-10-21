@@ -257,7 +257,6 @@ export default function ExportsView() {
                     onClick={() => handleDownload(pkg)}
                     disabled={downloadingId === pkg.id}
                     aria-label={`Download ${pkg.app_name} as zip`}
-                    data-umami-event="export-downloaded"
                   >
                     {downloadingId === pkg.id ? '...' : 'Download'}
                   </Button>

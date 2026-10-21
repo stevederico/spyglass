@@ -9,16 +9,6 @@ RUN if find /app \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' -pr
       find /app \( -name '.env' -o -name '.env.*' \) ! -name '.env.example' -print; \
       exit 1; \
     fi
-# Analytics trackers (OSS: env-loaded, never hardcoded). Vite inlines these
-# at build time; Railway supplies them as build args / service variables.
-ARG VITE_DOTTIE_SRC
-ARG VITE_DOTTIE_ID
-ARG VITE_UMAMI_SRC
-ARG VITE_UMAMI_ID
-ENV VITE_DOTTIE_SRC=$VITE_DOTTIE_SRC
-ENV VITE_DOTTIE_ID=$VITE_DOTTIE_ID
-ENV VITE_UMAMI_SRC=$VITE_UMAMI_SRC
-ENV VITE_UMAMI_ID=$VITE_UMAMI_ID
 RUN npm run build
 
 FROM rust:bookworm AS backend
