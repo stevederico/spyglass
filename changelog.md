@@ -1,3 +1,11 @@
+0.20.0
+
+  Refetch subscription events
+  Store subscription ID
+  Ignore superseded subscriptions
+  Retry webhook DB errors
+  Add webhook regression tests
+
 0.19.0
 
   Remove the remaining analytics code
