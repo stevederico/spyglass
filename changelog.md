@@ -1,3 +1,8 @@
+0.21.2
+
+  Remove isSubscriber route doc
+  Point to usage check
+
 0.21.1
 
   Pin Docker base images
