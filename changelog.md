@@ -1,3 +1,8 @@
+0.21.1
+
+  Pin Docker base images
+  Pin Rust 1.99.1
+
 0.21.0
 
   Pin skateboard-ui 5.11.0
