@@ -10,7 +10,7 @@ import {
   CommandGroup,
   CommandItem,
   CommandShortcut,
-} from '@stevederico/skateboard-ui/shadcn/ui/command';
+} from '@stevederico/skateboard-ui/ui/command';
 import {
   BarChart3,
   Camera,
@@ -20,8 +20,8 @@ import {
   Image,
   Search,
   ShieldCheck,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+} from '@stevederico/skateboard-ui/icons';
+import type { LucideIcon } from '@stevederico/skateboard-ui/icons';
 
 /** Page entry from constants.json's pages array. */
 interface PageEntry {

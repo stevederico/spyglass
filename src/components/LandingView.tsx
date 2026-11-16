@@ -9,9 +9,9 @@
  * @returns {JSX.Element} Landing page
  */
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
-import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
+import { Button } from '@stevederico/skateboard-ui/ui/button';
+import { Badge } from '@stevederico/skateboard-ui/ui/badge';
+import { Separator } from '@stevederico/skateboard-ui/ui/separator';
 
 /** Feature items for the grid section */
 const FEATURES = [

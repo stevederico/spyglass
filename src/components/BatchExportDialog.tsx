@@ -17,14 +17,14 @@
  */
 import { useState, useCallback } from 'react';
 import { getBackendURL, getCSRFToken } from '@stevederico/skateboard-ui/Utilities';
-import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@stevederico/skateboard-ui/shadcn/ui/sheet';
-import { Checkbox } from '@stevederico/skateboard-ui/shadcn/ui/checkbox';
-import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
-import { Progress } from '@stevederico/skateboard-ui/shadcn/ui/progress';
-import { ScrollArea } from '@stevederico/skateboard-ui/shadcn/ui/scroll-area';
-import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
-import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
+import { Button } from '@stevederico/skateboard-ui/ui/button';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@stevederico/skateboard-ui/ui/sheet';
+import { Checkbox } from '@stevederico/skateboard-ui/ui/checkbox';
+import { Label } from '@stevederico/skateboard-ui/ui/label';
+import { Progress } from '@stevederico/skateboard-ui/ui/progress';
+import { ScrollArea } from '@stevederico/skateboard-ui/ui/scroll-area';
+import { Separator } from '@stevederico/skateboard-ui/ui/separator';
+import { Badge } from '@stevederico/skateboard-ui/ui/badge';
 import { toast } from 'sonner';
 import { DEVICES, drawComposite, getDeviceFamily, detectFamilyFromImage } from './composerHelpers';
 import type { ComposerState } from './composerHelpers';

@@ -12,13 +12,13 @@ import { useState, useEffect, useRef } from 'react';
 import type { ChangeEvent } from 'react';
 import SkateboardSettingsView from '@stevederico/skateboard-ui/SettingsView';
 import { apiRequest } from '@stevederico/skateboard-ui/Utilities';
-import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardAction } from '@stevederico/skateboard-ui/shadcn/ui/card';
-import { Input } from '@stevederico/skateboard-ui/shadcn/ui/input';
-import { Label } from '@stevederico/skateboard-ui/shadcn/ui/label';
-import { Textarea } from '@stevederico/skateboard-ui/shadcn/ui/textarea';
-import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
-import { Separator } from '@stevederico/skateboard-ui/shadcn/ui/separator';
+import { Button } from '@stevederico/skateboard-ui/ui/button';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardAction } from '@stevederico/skateboard-ui/ui/card';
+import { Input } from '@stevederico/skateboard-ui/ui/input';
+import { Label } from '@stevederico/skateboard-ui/ui/label';
+import { Textarea } from '@stevederico/skateboard-ui/ui/textarea';
+import { Badge } from '@stevederico/skateboard-ui/ui/badge';
+import { Separator } from '@stevederico/skateboard-ui/ui/separator';
 import { toast } from 'sonner';
 
 /** Possible API connection states */

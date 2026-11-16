@@ -11,9 +11,9 @@
 import Header from '@stevederico/skateboard-ui/Header';
 import UpgradeSheet from '@stevederico/skateboard-ui/UpgradeSheet';
 import type { UpgradeSheetHandle } from '@stevederico/skateboard-ui/UpgradeSheet';
-import { KeyRound, Loader, Smartphone } from 'lucide-react';
-import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Card, CardContent } from '@stevederico/skateboard-ui/shadcn/ui/card';
+import { KeyRound, Loader, Smartphone } from '@stevederico/skateboard-ui/icons';
+import { Button } from '@stevederico/skateboard-ui/ui/button';
+import { Card, CardContent } from '@stevederico/skateboard-ui/ui/card';
 import { useState, useRef, useEffect } from "react";
 import { apiRequest, getRemainingUsage, trackUsage, showUpgradeSheet } from '@stevederico/skateboard-ui/Utilities';
 import { getState } from '@stevederico/skateboard-ui/Context';

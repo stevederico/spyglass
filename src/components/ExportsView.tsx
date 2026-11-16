@@ -11,10 +11,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import Header from '@stevederico/skateboard-ui/Header';
 import { apiRequest, getBackendURL } from '@stevederico/skateboard-ui/Utilities';
-import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
-import { Badge } from '@stevederico/skateboard-ui/shadcn/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@stevederico/skateboard-ui/shadcn/ui/dialog';
-import { Spinner } from '@stevederico/skateboard-ui/shadcn/ui/spinner';
+import { Button } from '@stevederico/skateboard-ui/ui/button';
+import { Badge } from '@stevederico/skateboard-ui/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@stevederico/skateboard-ui/ui/dialog';
+import { Spinner } from '@stevederico/skateboard-ui/ui/spinner';
 import { toast } from 'sonner';
 import { useApp } from './AppContext';
 import AppPicker from './AppPicker';

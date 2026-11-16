@@ -10,8 +10,8 @@
 import Header from '@stevederico/skateboard-ui/Header';
 import UpgradeSheet from '@stevederico/skateboard-ui/UpgradeSheet';
 import type { UpgradeSheetHandle } from '@stevederico/skateboard-ui/UpgradeSheet';
-import { Upload } from 'lucide-react';
-import { Button } from '@stevederico/skateboard-ui/shadcn/ui/button';
+import { Upload } from '@stevederico/skateboard-ui/icons';
+import { Button } from '@stevederico/skateboard-ui/ui/button';
 import { useState, useRef } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { getRemainingUsage, trackUsage, showUpgradeSheet, getCSRFToken } from '@stevederico/skateboard-ui/Utilities';
